@@ -38,12 +38,12 @@ CAsyncNotify* async_notify_new(int serverid);
 void async_notify_delete(CAsyncNotify *notify);
 
 
-#define ASYNC_NOTIFY_EVT_DATA			1
-#define ASYNC_NOTIFY_EVT_ACCEPT			2
-#define ASYNC_NOTIFY_EVT_ESTAB			4
-#define ASYNC_NOTIFY_EVT_LISTEN			8
-#define ASYNC_NOTIFY_EVT_CLOSED			16
-#define ASYNC_NOTIFY_EVT_ERROR			32
+#define ASYNC_NOTIFY_EVT_DATA			1	//  (wp=sid, lp=cmd)
+#define ASYNC_NOTIFY_EVT_NEW_IN			2	//  (wp=sid, lp=hid)
+#define ASYNC_NOTIFY_EVT_NEW_OUT		4	//  (wp=sid, lp=hid)
+#define ASYNC_NOTIFY_EVT_CLOSED_IN		8	//  (wp=sid, lp=hid)
+#define ASYNC_NOTIFY_EVT_CLOSED_OUT		16	//  (wp=sid, lp=hid)
+#define ASYNC_NOTIFY_EVT_ERROR			32	//  (wp=sid, lp=why)
 #define ASYNC_NOTIFY_EVT_CORE			64
 
 // wait events
@@ -80,8 +80,6 @@ int async_notify_close(CAsyncNotify *notify, int sid, int mode, int code);
 // get listening port
 int async_notify_get_port(CAsyncNotify *notify, long listenid);
 
-// config
-int async_notify_option(CAsyncNotify *notify, int type, int value);
 
 // clear ip allow table
 void async_notify_allow_clear(CAsyncNotify *notify);
@@ -107,9 +105,28 @@ void async_notify_sid_del(CAsyncNotify *notify, int sid);
 int async_notify_sid_list(CAsyncNotify *notify, int *sids);
 
 
+#define ASYNC_NOTIFY_OPT_PROFILE			0
+#define ASYNC_NOTIFY_OPT_TIMEOUT_IDLE		1
+#define ASYNC_NOTIFY_OPT_TIMEOUT_PING		2
+#define ASYNC_NOTIFY_OPT_SOCK_KEEPALIVE		3
+#define ASYNC_NOTIFY_OPT_SND_BUFSIZE		4
+#define ASYNC_NOTIFY_OPT_RCV_BUFSIZE		5
+#define ASYNC_NOTIFY_OPT_BUFFER_LIMIT		6
+#define ASYNC_NOTIFY_OPT_SIGN_TIMEOUT		7
+#define ASYNC_NOTIFY_OPT_RETRY_TIMEOUT		8
+#define ASYNC_NOTIFY_OPT_NET_TIMEOUT		9
+
 #define ASYNC_NOTIFY_LOG_INFO		1
 #define ASYNC_NOTIFY_LOG_REJECT		2
-#define ASYNC_NOTIFY_LOG_WARNING	4
+#define ASYNC_NOTIFY_LOG_ERROR		4
+#define ASYNC_NOTIFY_LOG_WARNING	8
+
+// config
+int async_notify_option(CAsyncNotify *notify, int type, long value);
+
+// set login token
+void async_notify_token(CAsyncNotify *notify, const char *token, int size);
+
 
 #ifdef __cplusplus
 }

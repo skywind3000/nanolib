@@ -11,6 +11,7 @@
 #include "itoolkit.h"
 
 #include <time.h>
+#include <stdarg.h>
 
 
 //=====================================================================
@@ -26,10 +27,11 @@ struct CAsyncConfig
 	int timeout_idle_kill;
 	int timeout_keepalive;
 	int sock_keepalive;
-	int send_bufsize;
-	int recv_bufsize;
+	long send_bufsize;
+	long recv_bufsize;
 	int buffer_limit;
 	int sign_timeout;
+	int retry_seconds;
 };
 
 
@@ -64,6 +66,7 @@ struct CAsyncNotify
 	idict_t *sid2hid_out;		// out sid -> hid
 	idict_t *sid2addr;			// sid -> addr
 	idict_t *allowip;			// ip white list
+	idict_t *sidblack;			// black list 
 	IUINT32 current;			// current millisec
 	ivalue_t token;				// authentication token
 	long seconds;				// seconds since UTC 1970.1.1 00:00:00
@@ -131,6 +134,8 @@ static void async_notify_cmd_data(CAsyncNotify *notify, CAsyncNode *node,
 	char *data, long length);
 
 static const char *async_notify_epname(char *p, const void *ep, int len);
+
+static void async_notify_config_load(CAsyncNotify *notify, int profile);
 
 static void async_notify_log(CAsyncNotify *notify, int, const char *, ...);
 
@@ -283,6 +288,40 @@ static void async_notify_set(CAsyncNotify *self, int mode, int sid, long hid)
 	}
 }
 
+// set into sid blacklist
+static void async_notify_black_set(CAsyncNotify *notify, int sid, int mode)
+{
+	long seconds = notify->seconds;
+	if (mode == 0) {
+		idict_del_i(notify->sidblack, sid);
+	}	else {
+		idict_update_is(notify->sidblack, sid, 
+			(char*)&seconds, sizeof(long));
+	}
+}
+
+// check sid blacklist
+static int async_notify_black_check(CAsyncNotify *notify, int sid)
+{
+	long seconds;
+	char *ptr;
+	ilong size;
+	if (idict_search_is(notify->sidblack, sid, &ptr, &size) != 0) return 0;
+	if (size != (int)sizeof(long)) {
+		assert(size == (int)sizeof(long));
+		idict_del_i(notify->sidblack, sid);
+		return 0;
+	}
+	seconds = *((long*)ptr);
+	if (notify->cfg.retry_seconds > 0) {
+		if (notify->seconds - seconds <= notify->cfg.retry_seconds) {
+			return 1;
+		}
+	}
+	idict_del_i(notify->sidblack, sid);
+	return 0;
+}
+
 // read header
 static void async_notify_header_read(const char *ptr, int *mid, int *cmd) 
 {
@@ -337,6 +376,7 @@ CAsyncNotify* async_notify_new(int serverid)
 		return NULL;
 	}
 
+	notify->maxsize = 0;
 	ims_init(&notify->msgs, notify->cache, 0, 0);
 	iv_init(&notify->vector, NULL);
 
@@ -371,12 +411,14 @@ CAsyncNotify* async_notify_new(int serverid)
 	notify->sid2hid_out = idict_create();
 	notify->sid2addr = idict_create();
 	notify->allowip = idict_create();
+	notify->sidblack = idict_create();
 	notify->sid2hid = (long*)ikmem_malloc(sizeof(long) * 0x10000);
 	
 	if (notify->sid2hid_in == NULL || 
 		notify->sid2hid_out == NULL ||
 		notify->sid2addr == NULL ||
 		notify->allowip == NULL ||
+		notify->sidblack == NULL ||
 		notify->nodes == NULL ||
 		notify->sid2hid == NULL ||
 		notify->core == NULL) {
@@ -401,8 +443,10 @@ CAsyncNotify* async_notify_new(int serverid)
 	notify->cfg.recv_bufsize = -1;
 	notify->cfg.buffer_limit = -1;
 	notify->cfg.sign_timeout = -1;
+	notify->cfg.retry_seconds = -1;
 
 	async_core_firewall(notify->core, async_notify_firewall, notify);
+	async_core_limit(notify->core, 0x400000, 0x200000);
 
 	return notify;
 }
@@ -434,6 +478,11 @@ void async_notify_delete(CAsyncNotify *notify)
 	if (notify->allowip) {
 		idict_delete(notify->allowip);
 		notify->allowip = NULL;
+	}
+
+	if (notify->sidblack) {
+		idict_delete(notify->sidblack);
+		notify->sidblack = NULL;
 	}
 
 	if (notify->sid2addr) {
@@ -486,6 +535,8 @@ void async_notify_change(CAsyncNotify *notify, int new_server_id)
 {
 	ASYNC_NOTIFY_CRITICAL_BEGIN(notify);
 	notify->sid = new_server_id;
+	async_notify_log(notify, ASYNC_NOTIFY_LOG_INFO,
+		"change sid to %d", new_server_id);
 	ASYNC_NOTIFY_CRITICAL_END(notify);
 }
 
@@ -575,9 +626,14 @@ static int async_notify_firewall(const struct sockaddr *remote, int len,
 void async_notify_sid_add(CAsyncNotify *notify, int sid,
 	struct sockaddr *remote, int size)
 {
+	char epname[128];
 	ASYNC_NOTIFY_CRITICAL_BEGIN(notify);
 	if (size <= 0) size = sizeof(struct sockaddr_in);
 	idict_update_is(notify->sid2addr, sid, (const char*)remote, size);
+	async_notify_black_set(notify, sid, 0);
+	async_notify_epname(epname, remote, size);
+	async_notify_log(notify, ASYNC_NOTIFY_LOG_INFO, 
+		"server add: sid=%d address=%s", sid, epname);
 	ASYNC_NOTIFY_CRITICAL_END(notify);
 }
 
@@ -586,6 +642,8 @@ void async_notify_sid_del(CAsyncNotify *notify, int sid)
 {
 	ASYNC_NOTIFY_CRITICAL_BEGIN(notify);
 	idict_del_i(notify->sid2addr, sid);
+	async_notify_log(notify, ASYNC_NOTIFY_LOG_INFO, 
+		"server del: sid=%d", sid);
 	ASYNC_NOTIFY_CRITICAL_END(notify);
 }
 
@@ -866,19 +924,34 @@ static void async_notify_on_leave(CAsyncNotify *notify, long hid, long tag,
 {
 	CAsyncNode *node;
 	const char *name = "unknow";
+	IUINT32 cc[2];
+	int sid;
 
 	node = async_notify_node_get(notify, hid);
 	assert(node != NULL);
+
+	sid = node->sid;
+	cc[0] = sockerr;
+	cc[1] = code;
 
 	if (node->mode == ASYNC_CORE_NODE_OUT) {
 		if (node->sid >= 0) {
 			async_notify_set(notify, ASYNC_CORE_NODE_OUT, node->sid, -1);
 		}
-		if (node->state == ASYNC_NOTIFY_STATE_CONNECTING) {
-
+		if (node->state != ASYNC_NOTIFY_STATE_LOGINED) {
+			async_notify_black_set(notify, node->sid, 1);
+			if (notify->logmask & ASYNC_NOTIFY_LOG_WARNING) {
+				async_notify_log(notify, ASYNC_NOTIFY_LOG_WARNING,
+					"[WARNING] server black add sid=%d for %d seconds",
+					sid, notify->cfg.retry_seconds);
+			}
 		}
 		name = "connection-out";
 		notify->count_out--;
+		if (notify->evtmask & ASYNC_NOTIFY_EVT_CLOSED_OUT) {
+			async_notify_msg_push(notify, ASYNC_NOTIFY_EVT_CLOSED_OUT,
+				node->sid, node->hid, cc, sizeof(IUINT32) * 2);
+		}
 	}
 	else if (node->mode == ASYNC_CORE_NODE_IN) {
 		if (node->sid >= 0) {
@@ -886,6 +959,10 @@ static void async_notify_on_leave(CAsyncNotify *notify, long hid, long tag,
 		}
 		name = "connection-in";
 		notify->count_in--;
+		if (notify->evtmask & ASYNC_NOTIFY_EVT_CLOSED_IN) {
+			async_notify_msg_push(notify, ASYNC_NOTIFY_EVT_CLOSED_IN,
+				node->sid, node->hid, cc, sizeof(IUINT32) * 2);
+		}
 	}
 	else if (node->mode == ASYNC_CORE_NODE_LISTEN4) {
 		name = "listener";
@@ -894,11 +971,11 @@ static void async_notify_on_leave(CAsyncNotify *notify, long hid, long tag,
 		name = "listener";
 	}
 
+	async_notify_node_del(notify, hid);
+
 	async_notify_log(notify, ASYNC_NOTIFY_LOG_INFO, 
 		"closed %s hid=%lx sid=%d error=%d code=%d", 
-		name, hid, sockerr, code);
-
-	async_notify_node_del(notify, hid);
+		name, hid, sid, sockerr, code);
 }
 
 static void async_notify_on_estab(CAsyncNotify *notify, long hid, long tag)
@@ -1064,6 +1141,11 @@ static void async_notify_cmd_login(CAsyncNotify *notify, CAsyncNode *node)
 	async_notify_header_write(data, ASYNC_NOTIFY_MSG_LOGINACK, 0);
 	async_core_send(notify->core, hid, data, 4);
 
+	if (notify->evtmask & ASYNC_NOTIFY_EVT_NEW_IN) {
+		async_notify_msg_push(notify, ASYNC_NOTIFY_EVT_NEW_IN,
+			sid1, hid, "", 0);
+	}
+
 	async_notify_log(notify, ASYNC_NOTIFY_LOG_INFO,
 		"login from remote successful: hid=%lx sid=%d", hid, sid1);
 }
@@ -1075,12 +1157,24 @@ static void async_notify_cmd_logack(CAsyncNotify *notify, CAsyncNode *node)
 	async_notify_header_read(data, &mid, &cmd);
 	if (cmd != 0) {
 		async_core_close(notify->core, node->hid, 8100 + cmd);
+		if (notify->evtmask & ASYNC_NOTIFY_EVT_ERROR) {
+			IUINT32 cc = cmd;
+			async_notify_msg_push(notify, ASYNC_NOTIFY_EVT_ERROR,
+				node->sid, node->hid, &cc, sizeof(cc));
+		}
 		async_notify_log(notify, ASYNC_NOTIFY_LOG_WARNING, 
 			"[WARNING] login error for hid=%lx sid=%d code=%d",
 			node->hid, node->sid, cmd);
 		return;
 	}
 	node->state = ASYNC_NOTIFY_STATE_LOGINED;
+	async_notify_black_set(notify, node->sid, 0);
+
+	if (notify->evtmask & ASYNC_NOTIFY_EVT_NEW_OUT) {
+		async_notify_msg_push(notify, ASYNC_NOTIFY_EVT_NEW_OUT,
+			node->sid, node->hid, "", 0);
+	}
+
 	async_notify_log(notify, ASYNC_NOTIFY_LOG_INFO,
 		"login to remote successful: hid=%lx sid=%d", node->hid, node->sid);
 }
@@ -1093,9 +1187,11 @@ static void async_notify_cmd_data(CAsyncNotify *notify, CAsyncNode *node,
 	async_notify_header_read(data, &mid, &cmd);
 	if (node->state != ASYNC_NOTIFY_STATE_LOGINED) {
 		async_core_close(notify->core, node->hid, 8200);
-		async_notify_log(notify, ASYNC_NOTIFY_LOG_WARNING, 
+		if (notify->logmask & ASYNC_NOTIFY_LOG_WARNING) {
+			async_notify_log(notify, ASYNC_NOTIFY_LOG_WARNING, 
 			"[WARNING] can not receive data for hid=%lx sid=%d cmd=%d",
 			node->hid, node->sid, cmd);
+		}
 		return;
 	}
 
@@ -1114,7 +1210,7 @@ long async_notify_listen(CAsyncNotify *notify, const struct sockaddr *addr,
 	long hr = -1;
 	long hid;
 	int head = 2;
-	int port = 0;
+	int port = -1;
 
 	if (addrlen <= 0) addrlen = sizeof(struct sockaddr_in);
 	if (flag & 1) head |= ISOCK_REUSEADDR << 8;
@@ -1151,9 +1247,26 @@ long async_notify_listen(CAsyncNotify *notify, const struct sockaddr *addr,
 
 			node->state = port;
 			hr = hid;
+			if (notify->logmask & ASYNC_NOTIFY_LOG_INFO) {
+				async_notify_log(notify, ASYNC_NOTIFY_LOG_INFO,
+				"create new listener hid=%lx on port=%d", hid, port);
+			}
 		}
 	}	else {
 		hr = hid;	// error
+		if (notify->logmask & ASYNC_NOTIFY_LOG_ERROR) {
+			struct sockaddr_in remote4;
+			struct sockaddr_in6 remote6;
+			if (addrlen <= (int)sizeof(struct sockaddr_in)) {
+				memcpy(&remote4, addr, sizeof(struct sockaddr_in));
+				port = ntohs(remote4.sin_port);
+			}	else {
+				memcpy(&remote6, addr, sizeof(struct sockaddr_in6));
+				port = ntohs(remote6.sin6_port);
+			}
+			async_notify_log(notify, ASYNC_NOTIFY_LOG_ERROR,
+			"[ERROR] failed to create new listener on port=%d", port);
+		}
 	}
 
 	ASYNC_NOTIFY_CRITICAL_END(notify);
@@ -1235,15 +1348,42 @@ static long async_notify_get_connection(CAsyncNotify *notify, int sid)
 
 	hr = async_notify_sid_get(notify, sid, rmt, 128);
 	// not find any server 
-	if (hr <= 0) return -1;
+	if (hr <= 0) {
+		if (notify->logmask & ASYNC_NOTIFY_LOG_WARNING) {
+			async_notify_log(notify, ASYNC_NOTIFY_LOG_WARNING,
+				"[WARNING] cannot send to sid=%d: sid unknow", sid);
+		}
+		return -1;
+	}
+
+	// check if in the black list
+	if (async_notify_black_check(notify, sid) != 0) {
+		if (notify->logmask & ASYNC_NOTIFY_LOG_WARNING) {
+			async_notify_log(notify, ASYNC_NOTIFY_LOG_WARNING,
+			"[WARNING] cannot send to sid=%d: retry must wait a while", sid);
+			return -2;
+		}
+	}
 
 	// create connection
 	hid = async_core_new_connect(notify->core, rmt, hr, 2);
-	if (hid < 0) return -2;
+	if (hid < 0) {
+		if (notify->logmask & ASYNC_NOTIFY_LOG_ERROR) {
+			async_notify_log(notify, ASYNC_NOTIFY_LOG_ERROR,
+				"[ERROR] cannot send to sid=%d: hid failed", sid);
+		}
+		return -3;
+	}
 
 	// create AsyncNode
 	node = async_notify_node_new(notify, hid);
-	if (node == NULL) return -3;
+	if (node == NULL) {
+		if (notify->logmask & ASYNC_NOTIFY_LOG_ERROR) {
+			async_notify_log(notify, ASYNC_NOTIFY_LOG_ERROR,
+				"[ERROR] cannot send to sid=%d: create node failed", sid);
+		}
+		return -4;
+	}
 
 	node->sid = sid;
 	node->mode = ASYNC_CORE_NODE_OUT;
@@ -1283,6 +1423,11 @@ static long async_notify_get_connection(CAsyncNotify *notify, int sid)
 	iencode32u_lsb(data + 4, notify->current);
 	async_core_send(notify->core, hid, data, 8);
 
+	if (notify->logmask & ASYNC_NOTIFY_LOG_INFO) {
+		async_notify_log(notify, ASYNC_NOTIFY_LOG_INFO,
+			"create new connection hid=%lx to sid=%d", hid, sid);
+	}
+
 	return hid;
 }
 
@@ -1317,6 +1462,11 @@ int async_notify_send(CAsyncNotify *notify, int sid, short cmd,
 		// update idle time
 		async_notify_node_active(notify, hid, 1);
 	}	else {
+		if (notify->evtmask & ASYNC_NOTIFY_EVT_ERROR) {
+			const char *msg = "can not get connection for this sid";
+			async_notify_msg_push(notify, ASYNC_NOTIFY_EVT_ERROR,
+				-1, hr, msg, strlen(msg));
+		}
 		hr = hid;
 	}
 
@@ -1330,6 +1480,13 @@ int async_notify_send(CAsyncNotify *notify, int sid, short cmd,
 //---------------------------------------------------------------------
 int async_notify_close(CAsyncNotify *notify, int sid, int mode, int code)
 {
+	long hid = -1;
+	ASYNC_NOTIFY_CRITICAL_BEGIN(notify);
+	hid = async_notify_get(notify, mode, sid);
+	if (hid >= 0) {
+		async_core_close(notify->core, hid, code);
+	}
+	ASYNC_NOTIFY_CRITICAL_END(notify);
 	return 0;
 }
 
@@ -1339,21 +1496,153 @@ int async_notify_close(CAsyncNotify *notify, int sid, int mode, int code)
 //---------------------------------------------------------------------
 static void async_notify_on_timer(CAsyncNotify *notify)
 {
+	long seconds = notify->seconds;
+	CAsyncNode *node;
+	if (notify->cfg.timeout_keepalive > 0) {
+		while (1) {
+			node = async_notify_node_first(notify, 0);
+			if (node == NULL) break;
+			if (seconds - node->ts_ping <= notify->cfg.timeout_keepalive) {
+				break;
+			}
+			async_notify_node_active(notify, node->hid, 0);
+			if (node->state == ASYNC_NOTIFY_STATE_LOGINED) {
+				char *data = notify->data;
+				IUINT32 ts = (IUINT32)notify->current;
+				async_notify_header_write(data, ASYNC_NOTIFY_MSG_PING, 0);
+				iencode32u_lsb(data + 4, ts);
+				async_core_send(notify->core, node->hid, data, 8);
+			}
+		}
+	}
+	if (notify->cfg.timeout_idle_kill > 0) {
+		while (1) {
+			long x;
+			node = async_notify_node_first(notify, 1);
+			if (node == NULL) break;
+			if (seconds - node->ts_idle <= notify->cfg.timeout_idle_kill) {
+				break;
+			}
+			x = seconds - node->ts_idle;
+			async_notify_node_active(notify, node->hid, 1);
+			async_core_close(notify->core, node->hid, 8301);
+			async_notify_log(notify, ASYNC_NOTIFY_LOG_INFO,
+				"kick idle connection hid=%lx timeout=%d seconds", 
+				node->hid, x);
+		}
+	}
 }
 
 
 //---------------------------------------------------------------------
 // config
 //---------------------------------------------------------------------
-int async_notify_option(CAsyncNotify *notify, int type, int value)
+int async_notify_option(CAsyncNotify *notify, int type, long value)
 {
 	int hr = -1;
+
 	ASYNC_NOTIFY_CRITICAL_BEGIN(notify);
+
 	switch (type) {
+	case ASYNC_NOTIFY_OPT_PROFILE:
+		async_notify_config_load(notify, (int)value);
+		hr = 0;
+		break;
+
+	case ASYNC_NOTIFY_OPT_TIMEOUT_IDLE:
+		notify->cfg.timeout_idle_kill = value;
+		hr = 0;
+		break;
+
+	case ASYNC_NOTIFY_OPT_TIMEOUT_PING:
+		notify->cfg.timeout_keepalive = value;
+		hr = 0;
+		break;
+
+	case ASYNC_NOTIFY_OPT_SOCK_KEEPALIVE:
+		notify->cfg.sock_keepalive = value;
+		hr = 0;
+		break;
+
+	case ASYNC_NOTIFY_OPT_SND_BUFSIZE:
+		notify->cfg.send_bufsize = value;
+		hr = 0;
+		break;
+
+	case ASYNC_NOTIFY_OPT_RCV_BUFSIZE:
+		notify->cfg.recv_bufsize = value;
+		hr = 0;
+		break;
+
+	case ASYNC_NOTIFY_OPT_BUFFER_LIMIT:
+		notify->cfg.buffer_limit = value;
+		hr = 0;
+		break;
+
+	case ASYNC_NOTIFY_OPT_SIGN_TIMEOUT:
+		notify->cfg.sign_timeout = value;
+		hr = 0;
+		break;
+	
+	case ASYNC_NOTIFY_OPT_RETRY_TIMEOUT:
+		notify->cfg.retry_seconds = value;
+		hr = 0;
+		break;
+	
+	case ASYNC_NOTIFY_OPT_NET_TIMEOUT:
+		async_core_timeout(notify->core, (value < 0)? -1 : value);
+		hr = 0;
+		break;
 	}
 	ASYNC_NOTIFY_CRITICAL_END(notify);
 	return hr;
 }
+
+// load profile 
+static void async_notify_config_load(CAsyncNotify *notify, int profile)
+{
+	int value;
+	switch (profile) {
+	case 1:
+		notify->cfg.timeout_idle_kill = 300;
+		notify->cfg.timeout_keepalive = 300;
+		notify->cfg.sock_keepalive = 1;
+		notify->cfg.send_bufsize = -1;
+		notify->cfg.recv_bufsize = -1;
+		notify->cfg.buffer_limit = 0x400000;
+		notify->cfg.sign_timeout = 5 * 60;
+		notify->cfg.retry_seconds = 10;
+		break;
+	default:
+		notify->cfg.timeout_idle_kill = -1;
+		notify->cfg.timeout_keepalive = -1;
+		notify->cfg.sock_keepalive = -1;
+		notify->cfg.send_bufsize = -1;
+		notify->cfg.recv_bufsize = -1;
+		notify->cfg.buffer_limit = -1;
+		notify->cfg.sign_timeout = -1;
+		notify->cfg.retry_seconds = -1;
+		break;
+	}
+	value = notify->cfg.timeout_keepalive;
+	async_core_timeout(notify->core, (value < 0)? -1 : value * 2);
+}
+
+
+//---------------------------------------------------------------------
+// set login token
+//---------------------------------------------------------------------
+void async_notify_token(CAsyncNotify *notify, const char *token, int size)
+{
+	ASYNC_NOTIFY_CRITICAL_BEGIN(notify);
+	if (token == NULL || size <= 0) {
+		it_strcpyc(&notify->token, "", 0);
+	}	else {
+		it_strcpyc(&notify->token, (const char*)token, size);
+	}
+	ASYNC_NOTIFY_CRITICAL_END(notify);
+}
+
 
 //---------------------------------------------------------------------
 // write log
