@@ -949,8 +949,10 @@ static void async_notify_on_leave(CAsyncNotify *notify, long hid, long tag,
 		name = "connection-out";
 		notify->count_out--;
 		if (notify->evtmask & ASYNC_NOTIFY_EVT_CLOSED_OUT) {
-			async_notify_msg_push(notify, ASYNC_NOTIFY_EVT_CLOSED_OUT,
-				node->sid, node->hid, cc, sizeof(IUINT32) * 2);
+			if (node->state == ASYNC_NOTIFY_STATE_LOGINED) {
+				async_notify_msg_push(notify, ASYNC_NOTIFY_EVT_CLOSED_OUT,
+					node->sid, node->hid, cc, sizeof(IUINT32) * 2);
+			}
 		}
 	}
 	else if (node->mode == ASYNC_CORE_NODE_IN) {
@@ -960,8 +962,10 @@ static void async_notify_on_leave(CAsyncNotify *notify, long hid, long tag,
 		name = "connection-in";
 		notify->count_in--;
 		if (notify->evtmask & ASYNC_NOTIFY_EVT_CLOSED_IN) {
-			async_notify_msg_push(notify, ASYNC_NOTIFY_EVT_CLOSED_IN,
-				node->sid, node->hid, cc, sizeof(IUINT32) * 2);
+			if (node->state == ASYNC_NOTIFY_STATE_LOGINED) {
+				async_notify_msg_push(notify, ASYNC_NOTIFY_EVT_CLOSED_IN,
+					node->sid, node->hid, cc, sizeof(IUINT32) * 2);
+			}
 		}
 	}
 	else if (node->mode == ASYNC_CORE_NODE_LISTEN4) {
@@ -1539,6 +1543,8 @@ static void async_notify_on_timer(CAsyncNotify *notify)
 //---------------------------------------------------------------------
 int async_notify_option(CAsyncNotify *notify, int type, long value)
 {
+	CAsyncNode *node;
+	long hid = -1;
 	int hr = -1;
 
 	ASYNC_NOTIFY_CRITICAL_BEGIN(notify);
@@ -1593,6 +1599,35 @@ int async_notify_option(CAsyncNotify *notify, int type, long value)
 		async_core_timeout(notify->core, (value < 0)? -1 : value);
 		hr = 0;
 		break;
+	
+	case ASYNC_NOTIFY_OPT_EVT_MASK:
+		notify->evtmask = (int)value;
+		hr = 0;
+		break;
+
+	case ASYNC_NOTIFY_OPT_LOG_MASK:
+		notify->logmask = (int)value;
+		hr = 0;
+		break;
+	
+	case ASYNC_NOTIFY_OPT_GET_PING:
+		hid = async_notify_get(notify, ASYNC_CORE_NODE_OUT, value);
+		hr = -1;
+		if (hid >= 0) {
+			node = async_notify_node_get(notify, hid);
+			if (node) {
+				hr = node->rtt;
+			}
+		}
+		break;
+	
+	case ASYNC_NOTIFY_OPT_GET_OUT_COUNT:
+		hr = notify->count_out;
+		break;
+
+	case ASYNC_NOTIFY_OPT_GET_IN_COUNT:
+		hr = notify->count_in;
+		break;
 	}
 	ASYNC_NOTIFY_CRITICAL_END(notify);
 	return hr;
@@ -1641,6 +1676,31 @@ void async_notify_token(CAsyncNotify *notify, const char *token, int size)
 		it_strcpyc(&notify->token, (const char*)token, size);
 	}
 	ASYNC_NOTIFY_CRITICAL_END(notify);
+}
+
+
+//---------------------------------------------------------------------
+// set new function and return old one
+//---------------------------------------------------------------------
+void *async_notify_install(CAsyncNotify *notify, CAsyncNotify_WriteLog func)
+{
+	CAsyncNotify_WriteLog old;
+	ASYNC_NOTIFY_CRITICAL_BEGIN(notify);
+	old = notify->writelog;
+	notify->writelog = func;
+	ASYNC_NOTIFY_CRITICAL_END(notify);
+	return old;
+}
+
+// set new function and return old one
+void *async_notify_user(CAsyncNotify *notify, void *user)
+{
+	void *old;
+	ASYNC_NOTIFY_CRITICAL_BEGIN(notify);
+	old = notify->user;
+	notify->user = user;
+	ASYNC_NOTIFY_CRITICAL_END(notify);
+	return old;
 }
 
 

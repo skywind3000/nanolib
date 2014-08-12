@@ -115,6 +115,11 @@ int async_notify_sid_list(CAsyncNotify *notify, int *sids);
 #define ASYNC_NOTIFY_OPT_SIGN_TIMEOUT		7
 #define ASYNC_NOTIFY_OPT_RETRY_TIMEOUT		8
 #define ASYNC_NOTIFY_OPT_NET_TIMEOUT		9
+#define ASYNC_NOTIFY_OPT_EVT_MASK			10
+#define ASYNC_NOTIFY_OPT_LOG_MASK			11
+#define ASYNC_NOTIFY_OPT_GET_PING			12
+#define ASYNC_NOTIFY_OPT_GET_OUT_COUNT		13
+#define ASYNC_NOTIFY_OPT_GET_IN_COUNT		14
 
 #define ASYNC_NOTIFY_LOG_INFO		1
 #define ASYNC_NOTIFY_LOG_REJECT		2
@@ -126,6 +131,16 @@ int async_notify_option(CAsyncNotify *notify, int type, long value);
 
 // set login token
 void async_notify_token(CAsyncNotify *notify, const char *token, int size);
+
+
+// set log function
+typedef void (*CAsyncNotify_WriteLog)(const char *text, void *user);
+
+// set new function and return old one
+void *async_notify_install(CAsyncNotify *notify, CAsyncNotify_WriteLog func);
+
+// set new function and return old one
+void *async_notify_user(CAsyncNotify *notify, void *user);
 
 
 #ifdef __cplusplus
