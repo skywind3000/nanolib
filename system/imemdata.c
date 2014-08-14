@@ -1813,11 +1813,13 @@ int it_strsep(const ivalue_t *src, iulong *pos, ivalue_t *dst,
 	const ivalue_t *sep)
 {
 	iulong current, size, endup, i, s1, s2;
-	const char *p1 = it_str(src);
-	const char *p2 = it_str(sep);
+	const char *p1, *p2;
 
 	if (src == NULL || dst == NULL) return -1;
 	if (it_type(src) != ITYPE_STR || it_type(dst) != ITYPE_STR) return -2;
+
+	p1 = it_str(src);
+	p2 = it_str(sep);
 
 	current = (pos != NULL)? *pos : 0;
 

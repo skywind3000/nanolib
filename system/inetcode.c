@@ -790,22 +790,18 @@ long async_sock_recv(CAsyncSock *asyncsock, void *ptr, int size)
 void async_sock_rc4_set_skey(CAsyncSock *asyncsock, 
 	const unsigned char *key, int keylen)
 {
-	if (asyncsock->rc4_send_box) {
-		icrypt_rc4_init(asyncsock->rc4_send_box, 
+	icrypt_rc4_init(asyncsock->rc4_send_box, 
 			&asyncsock->rc4_send_x,
 			&asyncsock->rc4_send_y, key, keylen);
-	}
 }
 
 // set recv cryption key
 void async_sock_rc4_set_rkey(CAsyncSock *asyncsock, 
 	const unsigned char *key, int keylen)
 {
-	if (asyncsock->rc4_recv_box) {
-		icrypt_rc4_init(asyncsock->rc4_recv_box, 
+	icrypt_rc4_init(asyncsock->rc4_recv_box, 
 			&asyncsock->rc4_recv_x,
 			&asyncsock->rc4_recv_y, key, keylen);
-	}
 }
 
 // set nodelay
@@ -1408,13 +1404,14 @@ static long async_core_accept(CAsyncCore *core, long listen_hid)
 	maxsize = sock->maxsize;
 
 	sock = async_core_node_get(core, hid);
-	sock->mode = ASYNC_CORE_NODE_IN;
-	sock->ipv6 = (addrlen == sizeof(remote4))? 0 : 1;
 
 	if (sock == NULL) {
 		assert(sock);
 		abort();
 	}
+
+	sock->mode = ASYNC_CORE_NODE_IN;
+	sock->ipv6 = (addrlen == sizeof(remote4))? 0 : 1;
 
 	async_sock_assign(sock, fd, head);
 
@@ -1606,6 +1603,12 @@ static long _async_core_new_listen(CAsyncCore *core,
 	}
 
 	sock = async_core_node_get(core, hid);
+
+	if (sock == NULL) {
+		assert(sock != NULL;
+		return -5;
+	}
+
 	async_sock_assign(sock, fd, 0);
 
 	hr = ipoll_add(core->pfd, sock->fd, IPOLL_IN | IPOLL_ERR, sock);
@@ -2783,7 +2786,7 @@ static int iproxy_recv(struct ISOCKPROXY *proxy, int max)
 	if (iproxy_poll(proxy->socket, ISOCKPROXY_IN | ISOCKPROXY_ERR, 0) == 0) 
 		return 0;
 
-	max = (max <= 0)? 0x10000 : max;
+	max = (max <= 0)? 0x00400 : max;
 	msize = (proxy->offset < max)? max - proxy->offset : 0;
 	if (msize == 0) return 0;
 

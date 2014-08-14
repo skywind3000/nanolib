@@ -349,7 +349,7 @@ int itcp_setbuf(itcpcb *tcp, long bufsize)
 	rbuf = (char*)itcp_malloc(xlen);
 	if (!rbuf) return -2;
 	sbuf = (char*)itcp_malloc(xlen);
-	if (!sbuf) return -3;
+	if (!sbuf) { itcp_free(rbuf); return -3; }
 
 	#ifdef ITCP_CIRCLE
 	iring_swap(&tcp->rcache, rbuf, xlen);

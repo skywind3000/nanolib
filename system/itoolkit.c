@@ -675,7 +675,7 @@ int async_notify_sid_list(CAsyncNotify *notify, int *sids, int maxsize)
 		hr = size;
 	}	
 	else if (maxsize < size) {
-		return -size;
+		hr = -size;
 	}	
 	else {
 		pos = idict_pos_head(notify->sid2addr);
