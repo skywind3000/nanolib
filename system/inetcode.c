@@ -1605,7 +1605,7 @@ static long _async_core_new_listen(CAsyncCore *core,
 	sock = async_core_node_get(core, hid);
 
 	if (sock == NULL) {
-		assert(sock != NULL;
+		assert(sock != NULL);
 		return -5;
 	}
 
