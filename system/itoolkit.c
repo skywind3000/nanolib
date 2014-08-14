@@ -1700,7 +1700,7 @@ void *async_notify_install(CAsyncNotify *notify, CAsyncNotify_WriteLog func)
 	old = notify->writelog;
 	notify->writelog = func;
 	ASYNC_NOTIFY_CRITICAL_END(notify);
-	return old;
+	return (void*)old;
 }
 
 // set new function and return old one
