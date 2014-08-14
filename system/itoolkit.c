@@ -663,7 +663,7 @@ static int async_notify_sid_get(CAsyncNotify *notify, int sid,
 }
 
 // list sids into an array
-int async_notify_sid_list(CAsyncNotify *notify, int *sids)
+int async_notify_sid_list(CAsyncNotify *notify, int *sids, int maxsize)
 {
 	int size = 0;
 	int i = 0;
@@ -673,7 +673,11 @@ int async_notify_sid_list(CAsyncNotify *notify, int *sids)
 	size = notify->sid2addr->size;
 	if (sids == NULL) {
 		hr = size;
-	}	else {
+	}	
+	else if (maxsize < size) {
+		return -size;
+	}	
+	else {
 		pos = idict_pos_head(notify->sid2addr);
 		while (pos >= 0) {
 			ivalue_t *key = idict_pos_get_key(notify->sid2addr, pos);
@@ -687,6 +691,13 @@ int async_notify_sid_list(CAsyncNotify *notify, int *sids)
 	return hr;
 }
 
+// sid clear
+void async_notify_sid_clear(CAsyncNotify *notify)
+{
+	ASYNC_NOTIFY_CRITICAL_BEGIN(notify);
+	idict_clear(notify->sid2addr);
+	ASYNC_NOTIFY_CRITICAL_END(notify);
+}
 
 
 //---------------------------------------------------------------------

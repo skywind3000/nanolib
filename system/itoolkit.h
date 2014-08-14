@@ -102,7 +102,10 @@ void async_notify_sid_add(CAsyncNotify *notify, int sid,
 void async_notify_sid_del(CAsyncNotify *notify, int sid);
 
 // list sids into an array
-int async_notify_sid_list(CAsyncNotify *notify, int *sids);
+int async_notify_sid_list(CAsyncNotify *notify, int *sids, int maxsize);
+
+// sid clear
+void async_notify_sid_clear(CAsyncNotify *notify);
 
 
 #define ASYNC_NOTIFY_OPT_PROFILE			0
