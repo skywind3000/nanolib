@@ -1,6 +1,6 @@
 //=====================================================================
 //
-// itoolkit.h - 工具函数大集合
+// itoolkit.h - AsyncNotify implementation
 //
 // NOTE:
 // for more information, please see the readme file.

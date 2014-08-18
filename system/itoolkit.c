@@ -1,6 +1,6 @@
 //=====================================================================
 //
-// itoolbox.c - 工具函数大集合
+// itoolbox.c - AsyncNotify implementation
 //
 // NOTE:
 // for more information, please see the readme file.
