@@ -1585,6 +1585,10 @@ static long _async_core_new_listen(CAsyncCore *core,
 		ienable(fd, ISOCK_REUSEADDR);		
 	}
 
+	if (flag & ISOCK_REUSEPORT) {
+		ienable(fd, ISOCK_REUSEPORT);
+	}
+
 	if (ibind(fd, addr, addrlen) != 0) {
 		iclose(fd);
 		return -2;

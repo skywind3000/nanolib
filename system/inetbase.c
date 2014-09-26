@@ -588,6 +588,14 @@ int ienable(int fd, int mode)
 		retval = isetsockopt(fd, (int)SOL_SOCKET, SO_REUSEADDR, 
 			(char*)&value, sizeof(value));
 		break;
+	case ISOCK_REUSEPORT:
+		#ifdef SO_REUSEPORT
+		retval = isetsockopt(fd, (int)SOL_SOCKET, SO_REUSEPORT, 
+			(char*)&value, sizeof(value));
+		#else
+		retval = -10000;
+		#endif
+		break;
 	case ISOCK_NODELAY:
 		#ifndef __AVM3__
 		retval = isetsockopt(fd, (int)IPPROTO_TCP, TCP_NODELAY, 
@@ -621,6 +629,14 @@ int idisable(int fd, int mode)
 	case ISOCK_REUSEADDR:
 		retval = isetsockopt(fd, (int)SOL_SOCKET, SO_REUSEADDR, 
 				(char*)&value, sizeof(value));
+		break;
+	case ISOCK_REUSEPORT:
+		#ifdef SO_REUSEPORT
+		retval = isetsockopt(fd, (int)SOL_SOCKET, SO_REUSEPORT, 
+			(char*)&value, sizeof(value));
+		#else
+		retval = -10000;
+		#endif
 		break;
 	case ISOCK_NODELAY:
 		#ifndef __AVM3__
