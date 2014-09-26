@@ -1589,6 +1589,10 @@ static long _async_core_new_listen(CAsyncCore *core,
 		ienable(fd, ISOCK_REUSEPORT);
 	}
 
+	if (flag & ISOCK_UNIXREUSE) {
+		ienable(fd, ISOCK_UNIXREUSE);
+	}
+
 	if (ibind(fd, addr, addrlen) != 0) {
 		iclose(fd);
 		return -2;
@@ -2064,6 +2068,20 @@ static int _async_core_option(CAsyncCore *core, long hid,
 			hr = idisable(sock->fd, ISOCK_REUSEADDR);
 		}	else {
 			hr = ienable(sock->fd, ISOCK_REUSEADDR);
+		}
+		break;
+	case ASYNC_CORE_OPTION_REUSEPORT:
+		if (value == 0) {
+			hr = idisable(sock->fd, ISOCK_REUSEPORT);
+		}	else {
+			hr = ienable(sock->fd, ISOCK_REUSEPORT);
+		}
+		break;
+	case ASYNC_CORE_OPTION_UNIXREUSE:
+		if (value == 0) {
+			hr = idisable(sock->fd, ISOCK_UNIXREUSE);
+		}	else {
+			hr = ienable(sock->fd, ISOCK_UNIXREUSE);
 		}
 		break;
 	case ASYNC_CORE_OPTION_KEEPALIVE:

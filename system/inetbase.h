@@ -341,6 +341,7 @@ typedef SOCKET Socket;
 #define ISOCK_NODELAY	3		/* flag - no delay        */
 #define ISOCK_NOPUSH	4		/* flag - no push         */
 #define ISOCK_REUSEPORT 8		/* flag - reuse port(bsd) */
+#define ISOCK_UNIXREUSE	16		/* use reuseaddr in bsd   */
 
 #define ISOCK_ERECV		1		/* event - recv           */
 #define ISOCK_ESEND		2		/* event - send           */

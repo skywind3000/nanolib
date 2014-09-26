@@ -1230,6 +1230,8 @@ long async_notify_listen(CAsyncNotify *notify, const struct sockaddr *addr,
 	if (addrlen <= 0) addrlen = sizeof(struct sockaddr_in);
 	if (flag & 1) head |= ISOCK_REUSEADDR << 8;
 	if (flag & 2) head |= ISOCK_REUSEPORT << 8;
+	if (flag & 4) head = ISOCK_UNIXREUSE;
+	if (flag < 0) head = ISOCK_UNIXREUSE;
 
 	ASYNC_NOTIFY_CRITICAL_BEGIN(notify);
 
