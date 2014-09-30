@@ -906,7 +906,6 @@ static void async_notify_on_new(CAsyncNotify *notify, long hid, long tag,
 	node = async_notify_node_get(notify, hid);
 	if (node != NULL) {
 		if (node->mode == ASYNC_CORE_NODE_OUT) {
-			async_notify_hid_init(notify, hid);
 			notify->count_out++;
 			async_notify_log(notify, ASYNC_NOTIFY_LOG_INFO, 
 				"new connection-out hid=%lx", hid);
@@ -1402,6 +1401,9 @@ static long async_notify_get_connection(CAsyncNotify *notify, int sid)
 		}
 		return -4;
 	}
+
+	// initialize connection
+	async_notify_hid_init(notify, hid);
 
 	node->sid = sid;
 	node->mode = ASYNC_CORE_NODE_OUT;
