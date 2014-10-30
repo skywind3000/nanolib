@@ -1,14 +1,14 @@
 //=====================================================================
 //
-// itoolkit.h - AsyncNotify implementation
+// inetnot.h - AsyncNotify implementation
 //
 // NOTE:
 // for more information, please see the readme file.
 //
 //=====================================================================
 
-#ifndef __ITOOLKIT_H__
-#define __ITOOLKIT_H__
+#ifndef __INETNOT_H__
+#define __INETNOT_H__
 
 #include "imemdata.h"
 #include "inetcode.h"

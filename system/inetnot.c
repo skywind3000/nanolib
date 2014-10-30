@@ -1,14 +1,13 @@
 //=====================================================================
 //
-// itoolbox.c - AsyncNotify implementation
+// inetnot.c - AsyncNotify implementation
 //
 // NOTE:
 // for more information, please see the readme file.
 //
 //=====================================================================
 #include "inetcode.h"
-#include "isecure.h"
-#include "itoolkit.h"
+#include "inetnot.h"
 
 #include <time.h>
 #include <stdarg.h>
@@ -132,6 +131,8 @@ static void async_notify_cmd_login(CAsyncNotify *notify, CAsyncNode *node);
 static void async_notify_cmd_logack(CAsyncNotify *notify, CAsyncNode *node);
 static void async_notify_cmd_data(CAsyncNotify *notify, CAsyncNode *node,
 	char *data, long length);
+
+void async_notify_hash(const void *in, size_t len, char *out);
 
 static const char *async_notify_epname(char *p, const void *ep, int len);
 
@@ -1074,9 +1075,9 @@ static void async_notify_cmd_login(CAsyncNotify *notify, CAsyncNode *node)
 
 	size = it_size(&notify->token);
 	memcpy(data + 20, it_str(&notify->token), size);
-
-	hash_md5sum(data, 20 + size, md5dst);
-	md5dst[32] = 0;
+	
+	memset(md5dst, 0, 33);
+	async_notify_hash(data, 20 + size, md5dst);
 
 	if (node->mode != ASYNC_CORE_NODE_IN) {
 		async_notify_header_write(data, ASYNC_NOTIFY_MSG_LOGINACK, 4);
@@ -1431,8 +1432,9 @@ static long async_notify_get_connection(CAsyncNotify *notify, int sid)
 	keysize = it_size(&notify->token);
 	memcpy(data + 20, it_str(&notify->token), keysize);
 
-	// calculate md5 signature
-	hash_md5sum(data, 20 + keysize, signature);
+	// calculate hash signature
+	memset(signature, 0, 32);
+	async_notify_hash(data, 20 + keysize, signature);
 	memcpy(data + 20, signature, 32);
 
 	// post login message
@@ -1721,6 +1723,141 @@ void *async_notify_user(CAsyncNotify *notify, void *user)
 
 
 //---------------------------------------------------------------------
+// hash
+//---------------------------------------------------------------------
+void async_notify_hash(const void *in, size_t len, char *out)
+{
+	static const char hex[17] = "0123456789abcdef";
+	const char *input = (const char*)in;
+	IUINT32 A, B, C, D;
+	IUINT32 E, F, G, H;
+	IUINT32 cache[16];
+	IUINT32 X[16];
+	IUINT8 R[16];
+	int i;
+
+	A = E = 0x67452301L;
+	B = F = 0xefcdab89L;
+	C = G = 0x98badcfeL;
+	D = H = 0x10325476L;
+	
+	#define	XF(b,c,d)	((((c) ^ (d)) & (b)) ^ (d))
+	#define XG(b,c,d)	(((b) & (c)) | ((b) & (d)) | ((c) & (d)))
+	#define	XH(b,c,d)	((b) ^ (c) ^ (d))
+	
+	#define XROTATE(a, n) (((a) << (n)) | ((a) >> (32 - (n))))
+	
+	#define X_R0(a,b,c,d,k,s,t) { \
+		a+=((k)+(t)+XF((b),(c),(d))); \
+		a=XROTATE(a,s); }
+
+	#define X_R1(a,b,c,d,k,s,t) { \
+		a+=((k)+(t)+XG((b),(c),(d))); \
+		a=XROTATE(a,s); }
+
+	#define X_R2(a,b,c,d,k,s,t) { \
+		a+=((k)+(t)+XH((b),(c),(d))); \
+		a=XROTATE(a,s); }
+
+	#define XLOADSW(ptr, x) { idecode32u_msb((ptr), &(x)); (ptr) += 4; }
+
+	while (len > 0) {
+		char *data = (char*)cache;
+		IUINT32 l = 0;
+		if (len >= 64) {
+			memcpy(data, input, 64);
+			input += 64;
+			len -= 64;
+		}	
+		else if (len > 0) {
+			memcpy(data, input, len);
+			memset(data + len, 0, 64 - len);
+			len = 0;
+		}
+
+		XLOADSW(data,l); X[ 0]=l;
+		XLOADSW(data,l); X[ 1]=l;
+
+		/* Round 0 */
+		X_R0(A,B,C,D,X[ 0], 3,0);	XLOADSW(data,l); X[ 2]=l;
+		X_R0(D,A,B,C,X[ 1], 7,0);	XLOADSW(data,l); X[ 3]=l;
+		X_R0(C,D,A,B,X[ 2],11,0);	XLOADSW(data,l); X[ 4]=l;
+		X_R0(B,C,D,A,X[ 3],19,0);	XLOADSW(data,l); X[ 5]=l;
+		X_R0(A,B,C,D,X[ 4], 3,0);	XLOADSW(data,l); X[ 6]=l;
+		X_R0(D,A,B,C,X[ 5], 7,0);	XLOADSW(data,l); X[ 7]=l;
+		X_R0(C,D,A,B,X[ 6],11,0);	XLOADSW(data,l); X[ 8]=l;
+		X_R0(B,C,D,A,X[ 7],19,0);	XLOADSW(data,l); X[ 9]=l;
+		X_R0(A,B,C,D,X[ 8], 3,0);	XLOADSW(data,l); X[10]=l;
+		X_R0(D,A,B,C,X[ 9], 7,0);	XLOADSW(data,l); X[11]=l;
+		X_R0(C,D,A,B,X[10],11,0);	XLOADSW(data,l); X[12]=l;
+		X_R0(B,C,D,A,X[11],19,0);	XLOADSW(data,l); X[13]=l;
+		X_R0(A,B,C,D,X[12], 3,0);	XLOADSW(data,l); X[14]=l;
+		X_R0(D,A,B,C,X[13], 7,0);	XLOADSW(data,l); X[15]=l;
+		X_R0(C,D,A,B,X[14],11,0);
+		X_R0(B,C,D,A,X[15],19,0);
+		/* Round 1 */
+		X_R1(A,B,C,D,X[ 0], 3,0x5A827999L); 
+		X_R1(D,A,B,C,X[ 4], 5,0x5A827999L);
+		X_R1(C,D,A,B,X[ 8], 9,0x5A827999L);
+		X_R1(B,C,D,A,X[12],13,0x5A827999L);
+		X_R1(A,B,C,D,X[ 1], 3,0x5A827999L);
+		X_R1(D,A,B,C,X[ 5], 5,0x5A827999L);
+		X_R1(C,D,A,B,X[ 9], 9,0x5A827999L);
+		X_R1(B,C,D,A,X[13],13,0x5A827999L);
+		X_R1(A,B,C,D,X[ 2], 3,0x5A827999L);
+		X_R1(D,A,B,C,X[ 6], 5,0x5A827999L);
+		X_R1(C,D,A,B,X[10], 9,0x5A827999L);
+		X_R1(B,C,D,A,X[14],13,0x5A827999L);
+		X_R1(A,B,C,D,X[ 3], 3,0x5A827999L);
+		X_R1(D,A,B,C,X[ 7], 5,0x5A827999L);
+		X_R1(C,D,A,B,X[11], 9,0x5A827999L);
+		X_R1(B,C,D,A,X[15],13,0x5A827999L);
+		/* Round 2 */
+		X_R2(A,B,C,D,X[ 0], 3,0x6ED9EBA1L);
+		X_R2(D,A,B,C,X[ 8], 9,0x6ED9EBA1L);
+		X_R2(C,D,A,B,X[ 4],11,0x6ED9EBA1L);
+		X_R2(B,C,D,A,X[12],15,0x6ED9EBA1L);
+		X_R2(A,B,C,D,X[ 2], 3,0x6ED9EBA1L);
+		X_R2(D,A,B,C,X[10], 9,0x6ED9EBA1L);
+		X_R2(C,D,A,B,X[ 6],11,0x6ED9EBA1L);
+		X_R2(B,C,D,A,X[14],15,0x6ED9EBA1L);
+		X_R2(A,B,C,D,X[ 1], 3,0x6ED9EBA1L);
+		X_R2(D,A,B,C,X[ 9], 9,0x6ED9EBA1L);
+		X_R2(C,D,A,B,X[ 5],11,0x6ED9EBA1L);
+		X_R2(B,C,D,A,X[13],15,0x6ED9EBA1L);
+		X_R2(A,B,C,D,X[ 3], 3,0x6ED9EBA1L);
+		X_R2(D,A,B,C,X[11], 9,0x6ED9EBA1L);
+		X_R2(C,D,A,B,X[ 7],11,0x6ED9EBA1L);
+		X_R2(B,C,D,A,X[15],15,0x6ED9EBA1L);
+
+		A = E += A;
+		B = F += B;
+		C = G += C;
+		D = H += D;	
+	}
+	#undef XLOADSW
+	#undef X_R0
+	#undef X_R1
+	#undef X_R2
+	#undef XROTATE
+	#undef XF
+	#undef XG
+	#undef XH
+	
+	iencode32u_msb((char*)R +  0, E);
+	iencode32u_msb((char*)R +  4, F);
+	iencode32u_msb((char*)R +  8, G);
+	iencode32u_msb((char*)R + 12, H);
+
+	for (i = 0; i < 16; i++) {
+		unsigned char cc = R[i];
+		*out++ = hex[cc >> 4];
+		*out++ = hex[cc & 15];
+	}
+}
+
+
+//---------------------------------------------------------------------
 // write log
 //---------------------------------------------------------------------
 static void async_notify_log(CAsyncNotify *notify, int mask, 
@@ -1750,4 +1887,6 @@ void async_notify_log_stdout(const char *text, void *user)
 	printf("[%s] %s\n", timetxt, text);
 	fflush(stdout);
 }
+
+
 
