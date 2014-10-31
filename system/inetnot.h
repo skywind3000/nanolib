@@ -12,7 +12,6 @@
 
 #include "imemdata.h"
 #include "inetcode.h"
-#include "iposix.h"
 
 
 #ifdef __cplusplus
