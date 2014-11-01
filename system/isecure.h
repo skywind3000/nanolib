@@ -143,7 +143,8 @@ typedef unsigned long long IUINT64;
             defined(__m68k__) || defined(mc68000) || defined(_M_M68K) || \
             (defined(__MIPS__) && defined(__MISPEB__)) || \
             defined(__ppc__) || defined(__POWERPC__) || defined(_M_PPC) || \
-            defined(__sparc__) 
+            defined(__sparc__) || defined(__powerpc__) || \
+            defined(__mc68000__) || defined(__s390x__) || defined(__s390__)
             #define IWORDS_BIG_ENDIAN 1
         #endif
     #endif
@@ -204,7 +205,11 @@ char* hash_md5sum(const void *in, size_t len, char *out);
 // calculate sha1sum and convert digests to string
 char* hash_sha1sum(const void *in, size_t len, char *out);
 
-IUINT32 cal_crc32(const void *buf, int len);
+// calculate crc32 and return result
+IUINT32 hash_crc32(const void *in, size_t len);
+
+#define cal_crc32 hash_crc32
+
 
 #ifdef __cplusplus
 }

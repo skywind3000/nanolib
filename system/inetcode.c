@@ -2658,8 +2658,7 @@ int iutils_get_proc_pathname(char *ptr, int size)
 #define ISOCKPROXY_CONNECTED	10
 
 
-/// 转换编码格式 iproxy_base64
-/// 成功返回长度
+/// iproxy_base64
 int iproxy_base64(const unsigned char *in, unsigned char *out, int size)
 {
 	const char base64[] = 
@@ -2687,7 +2686,7 @@ int iproxy_base64(const unsigned char *in, unsigned char *out, int size)
 };
 
 
-/// 做一次POLL操作
+/// polling
 static int iproxy_poll(int sock, int event, long millisec)
 {
 	int retval = 0;
@@ -2766,7 +2765,7 @@ static int iproxy_poll(int sock, int event, long millisec)
 	return retval;
 }
 
-/// 返回错误码
+/// get error number
 static int iproxy_errno(void)
 {
 	int retval;
@@ -2778,7 +2777,7 @@ static int iproxy_errno(void)
 	return retval;
 }
 
-/// 发送数据
+/// send data
 static int iproxy_send(struct ISOCKPROXY *proxy)
 {
 	int retval;
@@ -2799,7 +2798,7 @@ static int iproxy_send(struct ISOCKPROXY *proxy)
 	return retval;
 }
 
-/// 接收数据
+/// receive data
 static int iproxy_recv(struct ISOCKPROXY *proxy, int max)
 {
 	int retval;
@@ -2825,8 +2824,8 @@ static int iproxy_recv(struct ISOCKPROXY *proxy, int max)
 
 
 ///
-/// 初始化连接数据 ISOCKPROXY
-/// 选择 type有：ISOCKPROXY_TYPE_NONE, ISOCKPROXY_TYPE_HTTP, 
+/// initialize ISOCKPROXY
+/// type is: ISOCKPROXY_TYPE_NONE, ISOCKPROXY_TYPE_HTTP, 
 //  ISOCKPROXY_TYPE_SOCKS4, ISOCKPROXY_TYPE_SOCKS5
 /// 
 int iproxy_init(struct ISOCKPROXY *proxy, int sock, int type, 
@@ -2920,8 +2919,8 @@ int iproxy_init(struct ISOCKPROXY *proxy, int sock, int type,
 
 
 ///
-/// 处理请求
-/// 成功返回1，失败返回<0，阻塞返回0
+/// update state
+/// returns 1 for success, below zero for error, zero for try again later
 ///
 int iproxy_process(struct ISOCKPROXY *proxy)
 {

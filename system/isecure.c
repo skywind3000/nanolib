@@ -10,6 +10,141 @@
 //=====================================================================
 #include "isecure.h"
 
+
+//=====================================================================
+// INLINE
+//=====================================================================
+#ifndef INLINE
+#if defined(__GNUC__)
+
+#if (__GNUC__ > 3) || ((__GNUC__ == 3) && (__GNUC_MINOR__ >= 1))
+#define INLINE         __inline__ __attribute__((always_inline))
+#else
+#define INLINE         __inline__
+#endif
+
+#elif (defined(_MSC_VER) || defined(__BORLANDC__) || defined(__WATCOMC__))
+#define INLINE __inline
+#else
+#define INLINE 
+#endif
+#endif
+
+#ifndef inline
+#define inline INLINE
+#endif
+
+
+/* encode 8 bits unsigned int */
+static inline char *is_encode8u(char *p, unsigned char c)
+{
+	*(unsigned char*)p++ = c;
+	return p;
+}
+
+/* decode 8 bits unsigned int */
+static inline const char *is_decode8u(const char *p, unsigned char *c)
+{
+	*c = *(unsigned char*)p++;
+	return p;
+}
+
+/* encode 16 bits unsigned int (lsb) */
+static inline char *is_encode16u_lsb(char *p, unsigned short w)
+{
+#if IWORDS_BIG_ENDIAN
+	*(unsigned char*)(p + 0) = (w & 255);
+	*(unsigned char*)(p + 1) = (w >> 8);
+#else
+	*(unsigned short*)(p) = w;
+#endif
+	p += 2;
+	return p;
+}
+
+/* decode 16 bits unsigned int (lsb) */
+static inline const char *is_decode16u_lsb(const char *p, unsigned short *w)
+{
+#if IWORDS_BIG_ENDIAN
+	*w = *(const unsigned char*)(p + 1);
+	*w = *(const unsigned char*)(p + 0) + (*w << 8);
+#else
+	*w = *(const unsigned short*)p;
+#endif
+	p += 2;
+	return p;
+}
+
+/* encode 16 bits unsigned int (msb) */
+static inline char *is_encode16u_msb(char *p, unsigned short w)
+{
+#if IWORDS_BIG_ENDIAN
+	*(unsigned short*)(p) = w;
+#else
+	*(unsigned char*)(p + 0) = (w >> 8);
+	*(unsigned char*)(p + 1) = (w & 255);
+#endif
+	p += 2;
+	return p;
+}
+
+/* decode 16 bits unsigned int (msb) */
+static inline const char *is_decode16u_msb(const char *p, unsigned short *w)
+{
+#if IWORDS_BIG_ENDIAN
+	*w = *(const unsigned short*)p;
+#else
+	*w = *(const unsigned char*)(p + 0);
+	*w = *(const unsigned char*)(p + 1) + (*w << 8);
+#endif
+	p += 2;
+	return p;
+}
+
+/* encode 32 bits unsigned int (lsb) */
+static inline char *is_encode32u_lsb(char *p, unsigned long l)
+{
+	*(unsigned char*)(p + 0) = (unsigned char)((l >>  0) & 0xff);
+	*(unsigned char*)(p + 1) = (unsigned char)((l >>  8) & 0xff);
+	*(unsigned char*)(p + 2) = (unsigned char)((l >> 16) & 0xff);
+	*(unsigned char*)(p + 3) = (unsigned char)((l >> 24) & 0xff);
+	p += 4;
+	return p;
+}
+
+/* decode 32 bits unsigned int (lsb) */
+static inline const char *is_decode32u_lsb(const char *p, unsigned long *l)
+{
+	*l = *(const unsigned char*)(p + 3);
+	*l = *(const unsigned char*)(p + 2) + (*l << 8);
+	*l = *(const unsigned char*)(p + 1) + (*l << 8);
+	*l = *(const unsigned char*)(p + 0) + (*l << 8);
+	p += 4;
+	return p;
+}
+
+/* encode 32 bits unsigned int (msb) */
+static inline char *is_encode32u_msb(char *p, unsigned long l)
+{
+	*(unsigned char*)(p + 0) = (unsigned char)((l >> 24) & 0xff);
+	*(unsigned char*)(p + 1) = (unsigned char)((l >> 16) & 0xff);
+	*(unsigned char*)(p + 2) = (unsigned char)((l >>  8) & 0xff);
+	*(unsigned char*)(p + 3) = (unsigned char)((l >>  0) & 0xff);
+	p += 4;
+	return p;
+}
+
+/* decode 32 bits unsigned int (msb) */
+static inline const char *is_decode32u_msb(const char *p, unsigned long *l)
+{
+	*l = *(const unsigned char*)(p + 0);
+	*l = *(const unsigned char*)(p + 1) + (*l << 8);
+	*l = *(const unsigned char*)(p + 2) + (*l << 8);
+	*l = *(const unsigned char*)(p + 3) + (*l << 8);
+	p += 4;
+	return p;
+}
+
 //=====================================================================
 // MD5
 //=====================================================================
@@ -269,11 +404,18 @@ void HASH_MD5_Final(HASH_MD5_CTX *ctx, unsigned char digest[16])
 void HASH_SHA1_Transform(IUINT32 state[5], const unsigned char buffer[64])
 {
 	IUINT32 a, b, c, d, e;
-	typedef union {
-		IUINT8  c[64];
+	typedef struct {
 		IUINT32 l[16];
 	}	CHAR64LONG16;
-	CHAR64LONG16* block;
+	CHAR64LONG16 blk;
+	CHAR64LONG16 *block = &blk;
+	for (e = 0; e < 16; e++) {
+		a = buffer[(e << 2) + 0];
+		b = buffer[(e << 2) + 1];
+		c = buffer[(e << 2) + 2];
+		d = buffer[(e << 2) + 3];
+		block->l[e] = a | (b << 8) | (c << 16) | (d << 24);
+	}
     block = (CHAR64LONG16*)buffer;
     /* Copy ctx->state[] to working vars */
     a = state[0];
@@ -460,13 +602,16 @@ IUINT32 crc_32_tab[] = { /* CRC polynomial 0xedb88320 */
 	0xb3667a2e, 0xc4614ab8, 0x5d681b02, 0x2a6f2b94, 0xb40bbe37, 0xc30c8ea1, 0x5a05df1b, 0x2d02ef8d
 };
 
-IUINT32 cal_crc32(const void *buf, int len){
-	unsigned char* p = (unsigned char *)buf;
+// calculate crc32 and return result
+IUINT32 hash_crc32(const void *in, size_t len)
+{
+	unsigned char* p = (unsigned char *)in;
 	IUINT32 result = 0xffffffff;
-	int i = 0;
+	size_t i = 0;
 	for (i = 0; i < len; i++){
 		result = UPDC32(p[i], result);
 	}
 	result ^= 0xffffffff;  
 	return result;
 }
+

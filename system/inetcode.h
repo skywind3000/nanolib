@@ -424,14 +424,14 @@ struct ISOCKPROXY
 };
 
 
-#define ISOCKPROXY_TYPE_NONE	0		// 类型: 无代理服务器
-#define ISOCKPROXY_TYPE_HTTP	1		// 类型: HTTP代理
-#define ISOCKPROXY_TYPE_SOCKS4	2		// 类型: SOCKS4代理
-#define ISOCKPROXY_TYPE_SOCKS5	3		// 类型: SOCKS5代理
+#define ISOCKPROXY_TYPE_NONE	0		// none proxy
+#define ISOCKPROXY_TYPE_HTTP	1		// http proxy
+#define ISOCKPROXY_TYPE_SOCKS4	2		// socks4
+#define ISOCKPROXY_TYPE_SOCKS5	3		// socks5
 
 ///
-/// 初始化连接数据 ISOCKPROXY
-/// 选择 type有: ISOCKPROXY_TYPE_NONE, ISOCKPROXY_TYPE_HTTP, 
+/// initialize ISOCKPROXY
+/// type is: ISOCKPROXY_TYPE_NONE, ISOCKPROXY_TYPE_HTTP, 
 //  ISOCKPROXY_TYPE_SOCKS4, ISOCKPROXY_TYPE_SOCKS5
 /// 
 int iproxy_init(struct ISOCKPROXY *proxy, int sock, int type, 
@@ -439,8 +439,8 @@ int iproxy_init(struct ISOCKPROXY *proxy, int sock, int type,
 	const char *user, const char *pass, int mode);
 
 ///
-/// 处理请求
-/// 成功返回1，失败返回<0，阻塞返回0
+/// update state
+/// returns 1 for success, below zero for error, zero for try again later
 ///
 int iproxy_process(struct ISOCKPROXY *proxy);
 
