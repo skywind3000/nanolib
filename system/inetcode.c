@@ -297,7 +297,8 @@ int async_sock_connect(CAsyncSock *asyncsock, const struct sockaddr *remote,
 	}
 
 	ienable(asyncsock->fd, ISOCK_NOBLOCK);
-	ienable(asyncsock->fd, ISOCK_REUSEADDR);
+	ienable(asyncsock->fd, ISOCK_UNIXREUSE);
+	ienable(asyncsock->fd, ISOCK_CLOEXEC);
 
 	if (iconnect(asyncsock->fd, remote, addrlen) != 0) {
 		int hr = ierrno();
@@ -352,7 +353,8 @@ int async_sock_assign(CAsyncSock *asyncsock, int sock, int header)
 	asyncsock->error = 0;
 
 	ienable(asyncsock->fd, ISOCK_NOBLOCK);
-	ienable(asyncsock->fd, ISOCK_REUSEADDR);
+	ienable(asyncsock->fd, ISOCK_UNIXREUSE);
+	ienable(asyncsock->fd, ISOCK_CLOEXEC);
 
 	asyncsock->state = ASYNC_SOCK_STATE_ESTAB;
 
@@ -1415,6 +1417,8 @@ static long async_core_accept(CAsyncCore *core, long listen_hid)
 
 	async_sock_assign(sock, fd, head);
 
+	ienable(fd, ISOCK_CLOEXEC);
+
 	sock->limited = limited;
 	sock->maxsize = maxsize;
 	
@@ -1592,6 +1596,8 @@ static long _async_core_new_listen(CAsyncCore *core,
 	if (flag & ISOCK_UNIXREUSE) {
 		ienable(fd, ISOCK_UNIXREUSE);
 	}
+
+	ienable(fd, ISOCK_CLOEXEC);
 
 	if (ibind(fd, addr, addrlen) != 0) {
 		iclose(fd);

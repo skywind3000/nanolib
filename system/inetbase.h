@@ -340,6 +340,7 @@ typedef SOCKET Socket;
 #define ISOCK_REUSEADDR	2		/* flag - reuse address   */
 #define ISOCK_NODELAY	3		/* flag - no delay        */
 #define ISOCK_NOPUSH	4		/* flag - no push         */
+#define ISOCK_CLOEXEC	5		/* flag - FD_CLOEXEC      */
 #define ISOCK_REUSEPORT 8		/* flag - reuse port(bsd) */
 #define ISOCK_UNIXREUSE	16		/* use reuseaddr in bsd   */
 

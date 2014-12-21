@@ -30,6 +30,7 @@
 #ifndef __AVM3__
 #include <poll.h>
 #include <netinet/tcp.h>
+#include <fcntl.h>
 #endif
 
 #if defined(__sun)
@@ -619,6 +620,14 @@ int ienable(int fd, int mode)
 		retval = -1000;
 		#endif
 		break;
+	case ISOCK_CLOEXEC:
+		#ifdef FD_CLOEXEC
+		value = fcntl(fd, F_GETFD);
+		retval = fcntl(fd, F_SETFD, FD_CLOEXEC | value);
+		#else
+		retval = -1000;
+		#endif
+		break;
 	}
 
 	return retval;
@@ -661,6 +670,15 @@ int idisable(int fd, int mode)
 		#ifdef TCP_NOPUSH
 		retval = isetsockopt(fd, (int)IPPROTO_TCP, TCP_NOPUSH, 
 				(char*)&value, sizeof(value));
+		#else
+		retval = -1000;
+		#endif
+		break;
+	case ISOCK_CLOEXEC:
+		#ifdef FD_CLOEXEC
+		value = fcntl(fd, F_GETFD);
+		value &= ~FD_CLOEXEC;
+		retval = fcntl(fd, F_SETFD, value);
 		#else
 		retval = -1000;
 		#endif
@@ -1396,6 +1414,8 @@ int inet_open_port(unsigned short port, unsigned long ip, int flags)
 	if ((flags & 1) != 0) {
 		ienable(sock, ISOCK_NOBLOCK);
 	}
+
+	ienable(sock, ISOCK_CLOEXEC);
 
 	return sock;
 }
@@ -2381,6 +2401,10 @@ static int ipk_init_pd(ipolld ipd, int param)
 	ps->kqueue = kqueue();
 	if (ps->kqueue < 0) return -1;
 
+#ifdef FD_CLOEXEC
+	fcntl(ps->kqueue, F_SETFD, FD_CLOEXEC);
+#endif
+
 	ipv_init(&ps->vchange);
 	ipv_init(&ps->vresult);
 	ipoll_fvinit(&ps->fv);
@@ -2686,6 +2710,10 @@ static int ipe_init_pd(ipolld ipd, int param)
 	PSTRUCT *ps = PDESC(ipd);
 	ps->epfd = epoll_create(param);
 	if (ps->epfd < 0) return -1;
+
+#ifdef FD_CLOEXEC
+	fcntl(ps->epfd, F_SETFD, FD_CLOEXEC);
+#endif
 
 	ipv_init(&ps->vresult);
 	ipoll_fvinit(&ps->fv);
