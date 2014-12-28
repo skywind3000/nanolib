@@ -217,7 +217,7 @@ void ikcp_release(ikcpcb *kcp)
 
 
 //---------------------------------------------------------------------
-// recv data
+// user/upper level recv: returns size, returns below zero for EAGAIN
 //---------------------------------------------------------------------
 int ikcp_recv(ikcpcb *kcp, char *buffer, int len)
 {
@@ -300,7 +300,7 @@ int ikcp_recv(ikcpcb *kcp, char *buffer, int len)
 
 
 //---------------------------------------------------------------------
-// send data
+// peek data size
 //---------------------------------------------------------------------
 int ikcp_peeksize(const ikcpcb *kcp)
 {
@@ -328,7 +328,7 @@ int ikcp_peeksize(const ikcpcb *kcp)
 
 
 //---------------------------------------------------------------------
-// send data
+// user/upper level send, returns below zero for error
 //---------------------------------------------------------------------
 int ikcp_send(ikcpcb *kcp, const char *buffer, int len)
 {
