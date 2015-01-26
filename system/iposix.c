@@ -945,4 +945,3 @@ char *iposix_path_format(char *out, const char *root, const char *fmt, ...)
 
 #endif
 
-

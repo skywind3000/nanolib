@@ -3717,7 +3717,7 @@ static int iposix_cond_win32_init(iConditionVariableWin32 *cond)
 				PSleepConditionVariableCS_o &&
 				PWakeConditionVariable_o &&
 				PWakeAllConditionVariable_o) {
-			#if 0
+			#if 1
 				iposix_cond_win32_vista = 1;
 			#endif
 			}
@@ -5600,7 +5600,6 @@ iulong iposix_sem_value(iPosixSemaphore *sem)
 }
 
 
-
 /*===================================================================*/
 /* DateTime Cross-Platform Interface                                 */
 /*===================================================================*/
@@ -5685,6 +5684,123 @@ void iposix_date_make(IINT64 *BCD, int year, int mon, int mday, int wday,
 	bcd |= ((IINT64)mon) << 35;
 	bcd |= ((IINT64)year) << 48;
 	BCD[0] = bcd;
+}
+
+/* format date time */
+char *iposix_date_format(const char *fmt, IINT64 datetime, char *dst)
+{
+	static char buffer[128];
+	char *out = dst;
+
+	static const char *weekday1[7] = { "Sun", "Mon", "Tus", "Wed", "Thu", 
+		"Fri", "Sat" };
+	static const char *weekday2[7] = { "Sunday", "Monday", "Tuesday", 
+		"Wednesday", "Thurday", "Friday", "Saturday" };
+	static const char *month1[13] = { "", "Jan", "Feb", "Mar", "Apr", "May",
+		"Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+	static const char *month2[13] = { "", "January", "February", "March", 
+		"April", "May", "June", "July", "August", "September", 
+		"October", "November", "December" };
+
+	if (dst == NULL) {
+		dst = buffer;
+		out = buffer;
+	}
+
+	while (fmt[0]) {
+		char ch = *fmt++;
+		if (ch == '%') {
+			ch = *fmt++;
+			if (ch == 0) {
+				*out++ = '%';
+				break;
+			}
+			switch (ch)
+			{
+			case '%':
+				*out++ = '%';
+				break;
+			case 'a':
+				sprintf(out, "%s", weekday1[iposix_time_wday(datetime)]);
+				out += strlen(weekday1[iposix_time_wday(datetime)]);
+				break;
+			case 'A':
+				sprintf(out, "%s", weekday2[iposix_time_wday(datetime)]);
+				out += strlen(weekday2[iposix_time_wday(datetime)]);
+				break;
+			case 'b':
+				sprintf(out, "%s", month1[iposix_time_mon(datetime)]);
+				out += strlen(month1[iposix_time_mon(datetime)]);
+				break;
+			case 'B':
+				sprintf(out, "%s", month2[iposix_time_mon(datetime)]);
+				out += strlen(month2[iposix_time_mon(datetime)]);
+				break;
+			case 'Y':
+				sprintf(out, "%04d", iposix_time_year(datetime));
+				out += 4;
+				break;
+			case 'y':
+				sprintf(out, "%02d", iposix_time_year(datetime) % 100);
+				out += 2;
+				break;
+			case 'm':
+				sprintf(out, "%02d", iposix_time_mon(datetime));
+				out += 2;
+				break;
+			case 'D':
+				sprintf(out, "%02d", iposix_time_wday(datetime));
+				out += 2;
+				break;
+			case 'd':
+				sprintf(out, "%02d", iposix_time_mday(datetime));
+				out += 2;
+				break;
+			case 'H':
+				sprintf(out, "%02d", iposix_time_hour(datetime));
+				out += 2;
+				break;
+			case 'h':
+				sprintf(out, "%02d", iposix_time_hour(datetime) % 12);
+				out += 2;
+				break;
+			case 'M':
+				sprintf(out, "%02d", iposix_time_min(datetime));
+				out += 2;
+				break;
+			case 'S':
+			case 's':
+				sprintf(out, "%02d", iposix_time_sec(datetime));
+				out += 2;
+				break;
+			case 'F':
+			case 'f':
+				sprintf(out, "%03d", iposix_time_ms(datetime));
+				out += 3;
+				break;
+			case 'p':
+			case 'P':
+				if (iposix_time_hour(datetime) < 12) {
+					sprintf(out, "AM");
+				}	else {
+					sprintf(out, "PM");
+				}
+				out += 2;
+				break;
+			default:
+				*out++ = '%';
+				*out++ = ch;
+				break;
+			}
+		}
+		else {
+			*out++ = ch;
+		}
+	}
+
+	*out++ = 0;
+
+	return dst;
 }
 
 

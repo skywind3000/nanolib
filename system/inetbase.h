@@ -974,7 +974,6 @@ iulong iposix_sem_peek(iPosixSemaphore *sem, iulong count,
 iulong iposix_sem_value(iPosixSemaphore *sem);
 
 
-
 /*===================================================================*/
 /* DateTime Cross-Platform Interface                                 */
 /*===================================================================*/
@@ -996,6 +995,9 @@ void iposix_datetime(int utc, IINT64 *BCD);
 /* make up date time */
 void iposix_date_make(IINT64 *BCD, int year, int mon, int mday, int wday,
 	int hour, int min, int sec, int ms);
+
+/* format time */
+char *iposix_date_format(const char *fmt, IINT64 datetime, char *dst);
 
 
 /*===================================================================*/

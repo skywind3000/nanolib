@@ -2509,125 +2509,8 @@ void iposix_shared_close(void *shared)
 }
 
 
-/* format date time */
-char *iposix_date_format(const char *fmt, IINT64 datetime, char *dst)
-{
-	static char buffer[128];
-	char *out = dst;
-
-	static const char *weekday1[7] = { "Sun", "Mon", "Tus", "Wed", "Thu", 
-		"Fri", "Sat" };
-	static const char *weekday2[7] = { "Sunday", "Monday", "Tuesday", 
-		"Wednesday", "Thurday", "Friday", "Saturday" };
-	static const char *month1[13] = { "", "Jan", "Feb", "Mar", "Apr", "May",
-		"Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-	static const char *month2[13] = { "", "January", "February", "March", 
-		"April", "May", "June", "July", "August", "September", 
-		"October", "November", "December" };
-
-	if (dst == NULL) {
-		dst = buffer;
-		out = buffer;
-	}
-
-	while (fmt[0]) {
-		char ch = *fmt++;
-		if (ch == '%') {
-			ch = *fmt++;
-			if (ch == 0) {
-				*out++ = '%';
-				break;
-			}
-			switch (ch)
-			{
-			case '%':
-				*out++ = '%';
-				break;
-			case 'a':
-				sprintf(out, "%s", weekday1[iposix_time_wday(datetime)]);
-				out += strlen(weekday1[iposix_time_wday(datetime)]);
-				break;
-			case 'A':
-				sprintf(out, "%s", weekday2[iposix_time_wday(datetime)]);
-				out += strlen(weekday2[iposix_time_wday(datetime)]);
-				break;
-			case 'b':
-				sprintf(out, "%s", month1[iposix_time_mon(datetime)]);
-				out += strlen(month1[iposix_time_mon(datetime)]);
-				break;
-			case 'B':
-				sprintf(out, "%s", month2[iposix_time_mon(datetime)]);
-				out += strlen(month2[iposix_time_mon(datetime)]);
-				break;
-			case 'Y':
-				sprintf(out, "%04d", iposix_time_year(datetime));
-				out += 4;
-				break;
-			case 'y':
-				sprintf(out, "%02d", iposix_time_year(datetime) % 100);
-				out += 2;
-				break;
-			case 'm':
-				sprintf(out, "%02d", iposix_time_mon(datetime));
-				out += 2;
-				break;
-			case 'D':
-				sprintf(out, "%02d", iposix_time_wday(datetime));
-				out += 2;
-				break;
-			case 'd':
-				sprintf(out, "%02d", iposix_time_mday(datetime));
-				out += 2;
-				break;
-			case 'H':
-				sprintf(out, "%02d", iposix_time_hour(datetime));
-				out += 2;
-				break;
-			case 'h':
-				sprintf(out, "%02d", iposix_time_hour(datetime) % 12);
-				out += 2;
-				break;
-			case 'M':
-				sprintf(out, "%02d", iposix_time_min(datetime));
-				out += 2;
-				break;
-			case 'S':
-			case 's':
-				sprintf(out, "%02d", iposix_time_sec(datetime));
-				out += 2;
-				break;
-			case 'F':
-			case 'f':
-				sprintf(out, "%03d", iposix_time_ms(datetime));
-				out += 3;
-				break;
-			case 'p':
-			case 'P':
-				if (iposix_time_hour(datetime) < 12) {
-					sprintf(out, "AM");
-				}	else {
-					sprintf(out, "PM");
-				}
-				out += 2;
-				break;
-			default:
-				*out++ = '%';
-				*out++ = ch;
-				break;
-			}
-		}
-		else {
-			*out++ = ch;
-		}
-	}
-
-	*out++ = 0;
-
-	return dst;
-}
-
 /* load file content */
-void *iutils_file_load_content(const char *filename, ilong *size)
+void *iposix_file_load_content(const char *filename, ilong *size)
 {
 #ifndef IDISABLE_FILE_SYSTEM_ACCESS
 	struct IMSTREAM ims;
@@ -2674,11 +2557,11 @@ void *iutils_file_load_content(const char *filename, ilong *size)
 
 
 /* load file content */
-int iutils_file_load_to_str(const char *filename, ivalue_t *str)
+int iposix_file_load_to_str(const char *filename, ivalue_t *str)
 {
 	char *ptr;
 	ilong size;
-	ptr = (char*)iutils_file_load_content(filename, &size);
+	ptr = (char*)iposix_file_load_content(filename, &size);
 	if (ptr == NULL) {
 		it_sresize(str, 0);
 		return -1;
@@ -2688,18 +2571,18 @@ int iutils_file_load_to_str(const char *filename, ivalue_t *str)
 	return 0;
 }
 
-#ifndef IUTILS_STACK_BUFFER_SIZE
-#define IUTILS_STACK_BUFFER_SIZE	1024
+#ifndef IPOSIX_STACK_BUFFER_SIZE
+#define IPOSIX_STACK_BUFFER_SIZE	1024
 #endif
 
 #ifndef IDISABLE_FILE_SYSTEM_ACCESS
 
 /* load line: returns -1 for end of file, 0 for success */
-int iutils_file_read_line(FILE *fp, ivalue_t *str)
+int iposix_file_read_line(FILE *fp, ivalue_t *str)
 {
-	const int bufsize = IUTILS_STACK_BUFFER_SIZE;
+	const int bufsize = IPOSIX_STACK_BUFFER_SIZE;
 	int size, eof = 0;
-	char buffer[IUTILS_STACK_BUFFER_SIZE];
+	char buffer[IPOSIX_STACK_BUFFER_SIZE];
 
 	it_sresize(str, 0);
 	for (size = 0, eof = 0; ; ) {
@@ -2730,7 +2613,7 @@ int iutils_file_read_line(FILE *fp, ivalue_t *str)
 
 
 /* cross os GetModuleFileName, returns size for success, -1 for error */
-int iutils_get_proc_pathname(char *ptr, int size)
+int iposix_get_proc_pathname(char *ptr, int size)
 {
 	int retval = -1;
 #if defined(_WIN32)
@@ -2749,7 +2632,7 @@ int iutils_get_proc_pathname(char *ptr, int size)
 #elif defined(linux) || defined(__CYGWIN__)
 	ilong length;
 	char *text;
-	text = (char*)iutils_file_load_content("/proc/self/exename", &length);
+	text = (char*)iposix_file_load_content("/proc/self/exename", &length);
 	if (text) {
 		retval = (int)(length < size? length : size);
 		memcpy(ptr, text, retval);

@@ -234,7 +234,7 @@ int icsv_reader_read(iCsvReader *reader)
 	}
 #ifndef IDISABLE_FILE_SYSTEM_ACCESS
 	else if (reader->fp) {
-		if (iutils_file_read_line(reader->fp, &reader->string) != 0) {
+		if (iposix_file_read_line(reader->fp, &reader->string) != 0) {
 			fclose(reader->fp);
 			reader->fp = 0;
 			return -1;

@@ -17,6 +17,7 @@
 /*-------------------------------------------------------------------*/
 /* C99 Compatible                                                    */
 /*-------------------------------------------------------------------*/
+#if defined(linux) || defined(__linux) || defined(__linux__)
 #ifdef _POSIX_C_SOURCE
 #if _POSIX_C_SOURCE < 200112L
 #undef _POSIX_C_SOURCE
@@ -47,6 +48,7 @@
 #define _BSD_SOURCE 1
 #define __BSD_VISIBLE 1
 #define _XOPEN_SOURCE 600
+#endif
 
 
 #ifndef IDISABLE_FILE_SYSTEM_ACCESS
@@ -55,7 +57,13 @@
 //---------------------------------------------------------------------
 #ifndef __INTEGER_32_BITS__
 #define __INTEGER_32_BITS__
-#if defined(_WIN64) || defined(WIN64) || defined(__amd64__) || \
+#if defined(__UINT32_TYPE__) && defined(__UINT32_TYPE__)
+	typedef __UINT32_TYPE__ ISTDUINT32;
+	typedef __INT32_TYPE__ ISTDINT32;
+#elif defined(__UINT_FAST32_TYPE__) && defined(__INT_FAST32_TYPE__)
+	typedef __UINT_FAST32_TYPE__ ISTDUINT32;
+	typedef __INT_FAST32_TYPE__ ISTDINT32;
+#elif defined(_WIN64) || defined(WIN64) || defined(__amd64__) || \
 	defined(__x86_64) || defined(__x86_64__) || defined(_M_IA64) || \
 	defined(_M_AMD64)
 	typedef unsigned int ISTDUINT32;
@@ -78,7 +86,7 @@
 #elif (defined(_MSC_VER) || defined(__BORLANDC__)) && (!defined(__MSDOS__))
 	typedef unsigned __int32 ISTDUINT32;
 	typedef __int32 ISTDINT32;
-#elif defined(__GNUC__)
+#elif defined(__GNUC__) && (__GNUC__ > 3)
 	#include <stdint.h>
 	typedef uint32_t ISTDUINT32;
 	typedef int32_t ISTDINT32;
@@ -88,12 +96,18 @@
 #endif
 #endif
 
+
 #if (defined(__APPLE__) && defined(__MACH__)) || defined(__MACOS__)
 #ifndef __unix
-#define __unix
+#define __unix 1
 #endif
 #endif
 
+#if defined(__unix__) || defined(unix) || defined(__linux)
+#ifndef __unix
+#define __unix 1
+#endif
+#endif
 
 #include <stdio.h>
 #ifdef __unix
@@ -337,6 +351,7 @@ const char *iposix_get_execwd(void);
 // iposix_path_format(out, iposix_get_execwd(), "images/%s", "abc.jpg")
 // 结果就是 /home/abc/work/images/abc.jpg
 char *iposix_path_format(char *out, const char *root, const char *fmt, ...);
+
 
 
 #ifdef __cplusplus

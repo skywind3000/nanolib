@@ -395,24 +395,19 @@ void iposix_shared_close(void *shared);
 
 #endif
 
-/**
- * format date time 
- */
-char *iposix_date_format(const char *fmt, IINT64 datetime, char *dst);
-
 #ifndef IDISABLE_FILE_SYSTEM_ACCESS
 
-/* load file content */
-void *iutils_file_load_content(const char *filename, ilong *size);
+/* load file content, use ikmem_free to dispose */
+void *iposix_file_load_content(const char *filename, ilong *size);
 
 /* load file content */
-int iutils_file_load_to_str(const char *filename, ivalue_t *str);
+int iposix_file_load_to_str(const char *filename, ivalue_t *str);
 
 /* load line: returns -1 for end of file, 0 for success */
-int iutils_file_read_line(FILE *fp, ivalue_t *str);
+int iposix_file_read_line(FILE *fp, ivalue_t *str);
 
 /* cross os GetModuleFileName, returns size for success, -1 for error */
-int iutils_get_proc_pathname(char *ptr, int size);
+int iposix_get_proc_pathname(char *ptr, int size);
 
 #endif
 
