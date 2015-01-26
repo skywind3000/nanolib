@@ -1498,7 +1498,7 @@ static inline void _ibit_set(void *data, ilong index, int value)
  * common string operation (not be defined in some compiler)
  **********************************************************************/
 
-#define ITOUPPER(a) (((a) >= 'a' && (a) <= 'z') ? ((a) - ('a' - 'A')) : (a))
+#define ITOUPPER(a) (((a) >= 97 && (a) <= 122) ? ((a) - 32) : (a))
 
 #define ILONG_MAX	((ilong)((~0ul) >> 1))
 #define ILONG_MIN	(-ILONG_MAX - 1)

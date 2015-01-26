@@ -4,7 +4,7 @@
  *
  * for more information, please see the readme file.
  *
- * link: -lpthread -lrt (linux/bsd) 
+ * link: -lpthread -lrt (linux/bsd/aix/...) 
  * link: -lwsock32 -lwinmm -lws2_32 (win)
  * link: -lsocket -lnsl -lpthread (solaris)
  *
@@ -48,16 +48,26 @@
 #define __BSD_VISIBLE 1
 #define _XOPEN_SOURCE 600
 
+#ifndef __linux
+#define __linux 1
+#endif
+
 #endif
 
 #include <stddef.h>
 #include <stdlib.h>
 
+#if defined(__unix__) || defined(unix) || defined(__linux)
+#ifndef __unix
+#define __unix 1
+#endif
+#endif
+
 
 /*-------------------------------------------------------------------*/
 /* Unix Platform                                                     */
 /*-------------------------------------------------------------------*/
-#if defined(__unix) || defined(unix) || defined(__MACH__)
+#if defined(__unix) || defined(unix) || defined(__MACH__) || defined(_AIX)
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
@@ -75,7 +85,7 @@
 #endif
 
 #ifndef __unix
-#define __unix
+#define __unix 1
 #endif
 
 #if defined(__MACH__) && (!defined(_SOCKLEN_T)) && (!defined(HAVE_SOCKLEN))
@@ -89,6 +99,7 @@ typedef int socklen_t;
 #define IEISCONN		EISCONN
 #define IEINPROGRESS	EINPROGRESS
 #define IEALREADY		EALREADY
+
 
 /*-------------------------------------------------------------------*/
 /* Windows Platform                                                  */
@@ -503,7 +514,7 @@ int ithread_kill(ilong id);
 #define IMUTEX_LOCK(m)      EnterCriticalSection((CRITICAL_SECTION*)(m))
 #define IMUTEX_UNLOCK(m)    LeaveCriticalSection((CRITICAL_SECTION*)(m))
 
-#elif defined(__unix) || defined(unix) || defined(__MACH__)
+#elif defined(__unix) || defined(__unix__) || defined(__MACH__)
 #include <unistd.h>
 #include <pthread.h>
 #define IMUTEX_TYPE         pthread_mutex_t
@@ -514,10 +525,10 @@ int ithread_kill(ilong id);
 
 #else
 #define IMUTEX_TYPE         int
-#define IMUTEX_INIT(m)      { (m) = (m); }
-#define IMUTEX_DESTROY(m)   { (m) = (m); }
-#define IMUTEX_LOCK(m)      { (m) = (m); }
-#define IMUTEX_UNLOCK(m)    { (m) = (m); }
+#define IMUTEX_INIT(m)      { (*(m)) = (*(m)); }
+#define IMUTEX_DESTROY(m)   { (*(m)) = (*(m)); }
+#define IMUTEX_LOCK(m)      { (*(m)) = (*(m)); }
+#define IMUTEX_UNLOCK(m)    { (*(m)) = (*(m)); }
 #endif
 
 #endif
@@ -720,10 +731,11 @@ int inet_tcp_estab(int sock);
 #define IDEVICE_SELECT		1
 #define IDEVICE_POLL		2
 #define IDEVICE_KQUEUE		3
-#define IDEVICE_WINCP		4
-#define IDEVICE_EPOLL		5
-#define IDEVICE_DEVPOLL		6
+#define IDEVICE_EPOLL		4
+#define IDEVICE_DEVPOLL		5
+#define IDEVICE_POLLSET		6
 #define IDEVICE_RTSIG		7
+#define IDEVICE_WINCP		8
 
 #ifndef IPOLL_IN
 #define IPOLL_IN	1
@@ -984,9 +996,6 @@ void iposix_datetime(int utc, IINT64 *BCD);
 /* make up date time */
 void iposix_date_make(IINT64 *BCD, int year, int mon, int mday, int wday,
 	int hour, int min, int sec, int ms);
-
-/* format date time */
-char *iposix_date_format(const char *fmt, IINT64 datetime, char *dst);
 
 
 /*===================================================================*/

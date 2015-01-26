@@ -289,7 +289,7 @@ typedef struct IMEMSLAB imemslab_t;
 #define IMUTEX_LOCK(m)      EnterCriticalSection((CRITICAL_SECTION*)(m))
 #define IMUTEX_UNLOCK(m)    LeaveCriticalSection((CRITICAL_SECTION*)(m))
 
-#elif defined(__unix) || defined(unix) || defined(__MACH__)
+#elif defined(__unix) || defined(__unix__) || defined(__MACH__)
 #include <unistd.h>
 #include <pthread.h>
 #define IMUTEX_TYPE         pthread_mutex_t
@@ -302,10 +302,10 @@ typedef struct IMEMSLAB imemslab_t;
 
 #ifndef IMUTEX_TYPE
 #define IMUTEX_TYPE         int
-#define IMUTEX_INIT(m)      { (m) = (m); }
-#define IMUTEX_DESTROY(m)   { (m) = (m); }
-#define IMUTEX_LOCK(m)      { (m) = (m); }
-#define IMUTEX_UNLOCK(m)    { (m) = (m); }
+#define IMUTEX_INIT(m)      { (*(m)) = (*(m)); }
+#define IMUTEX_DESTROY(m)   { (*(m)) = (*(m)); }
+#define IMUTEX_LOCK(m)      { (*(m)) = (*(m)); }
+#define IMUTEX_UNLOCK(m)    { (*(m)) = (*(m)); }
 #endif
 
 #endif

@@ -4,7 +4,7 @@
  *
  * for more information, please see the readme file.
  *
- * link: -lpthread -lrt (linux/bsd) 
+ * link: -lpthread -lrt (linux/bsd/aix/...) 
  * link: -lwsock32 -lwinmm -lws2_32 (win)
  * link: -lsocket -lnsl -lpthread (solaris)
  *
@@ -1474,13 +1474,18 @@ int inet_tcp_estab(int sock)
 #endif
 #if defined(__linux__)
 #define IHAVE_EPOLL
+#endif
+#if defined(__sun) || defined(__sun__)
+#define IHAVE_DEVPOLL
+#endif
+#if defined(_AIX)
+#define IHAVE_POLLSET
+#endif
+#if defined(__linux__)
 /*#define IHAVE_RTSIG*/
 #endif
 #if defined(_WIN32)
 /*#define IHAVE_WINCP*/
-#endif
-#if defined(sun)
-#define IHAVE_DEVPOLL
 #endif
 
 #if defined(__MACH__) && (!defined(IHAVE_KEVENT))
@@ -1550,14 +1555,17 @@ extern struct IPOLL_DRIVER IPOLL_POLL;
 #ifdef IHAVE_KEVENT
 extern struct IPOLL_DRIVER IPOLL_KEVENT;
 #endif
-#ifdef IHAVE_WINCP
-extern struct IPOLL_DRIVER IPOLL_WINCP;
-#endif
 #ifdef IHAVE_EPOLL
 extern struct IPOLL_DRIVER IPOLL_EPOLL;
 #endif
 #ifdef IHAVE_DEVPOLL
 extern struct IPOLL_DRIVER IPOLL_DEVPOLL;
+#endif
+#ifdef IHAVE_POLLSET
+extern struct IPOLL_DRIVER IPOLL_POLLSET;
+#endif
+#ifdef IHAVE_WINCP
+extern struct IPOLL_DRIVER IPOLL_WINCP;
 #endif
 #ifdef IHAVE_RTSIG
 extern struct IPOLL_DRIVER IPOLL_RTSIG;
@@ -1576,14 +1584,17 @@ static struct IPOLL_DRIVER *ipoll_list[] = {
 #ifdef IHAVE_EPOLL
 	&IPOLL_EPOLL,
 #endif
+#ifdef IHAVE_DEVPOLL
+	&IPOLL_DEVPOLL,
+#endif
+#ifdef IHAVE_POLLSET
+	&IPOLL_POLLSET,
+#endif
 #ifdef IHAVE_RTSIG
 	&IPOLL_RTSIG,
 #endif
 #ifdef IHAVE_WINCP
 	&IPOLL_WINCP,
-#endif
-#ifdef IHAVE_DEVPOLL
-	&IPOLL_DEVPOLL,
 #endif
 	NULL
 };
@@ -2193,7 +2204,7 @@ static int ipp_poll_add(ipolld ipd, int fd, int mask, void *user)
 		i = (ps->pnum_max <= 0)? 4 : ps->pnum_max * 2;
 		retval = ipv_resize(&ps->vpollfd, sizeof(struct pollfd) * i);
 		if (retval) return -3;
-		retval = ipv_resize(&ps->vresultq, sizeof(struct pollfd) * i);
+		retval = ipv_resize(&ps->vresultq, sizeof(struct pollfd) * i * 2);
 		if (retval) return -4;
 		ps->pnum_max = i;
 		ps->pfds = (struct pollfd*)ps->vpollfd.data;
@@ -2476,6 +2487,11 @@ static int ipk_poll_kevent(ipolld ipd, int fd, int filter, int flag)
 	ke->filter = filter;
 	ke->flags = flag;
 
+	if (ps->num_chg > 32000) {
+		kevent(ps->kqueue, ps->mchange, ps->num_chg, NULL, 0, 0);
+		ps->num_chg = 0;
+	}
+
 	return 0;
 }
 
@@ -2613,8 +2629,16 @@ static int ipk_poll_event(ipolld ipd, int *fd, int *event, void **user)
 	else revent = IPOLL_ERR;
 	if ((ke->flags & EV_ERROR)) revent = IPOLL_ERR;
 
-	if (ps->fv.fds[n].fd < 0) revent = 0;
-	revent &= ps->fv.fds[n].mask;
+	if (ps->fv.fds[n].fd < 0) {
+		revent = 0;
+		ipk_poll_kevent(ipd, n, EVFILT_READ, EV_DELETE | EV_DISABLE);
+		ipk_poll_kevent(ipd, n, EVFILT_WRITE, EV_DELETE | EV_DISABLE);
+	}	else {
+		revent &= ps->fv.fds[n].mask;
+		if (revent == 0) {
+			ipk_poll_set(ipd, n, ps->fv.fds[n].mask);
+		}
+	}
 
 	if (fd) *fd = n;
 	if (event) *event = revent;
@@ -2754,7 +2778,7 @@ static int ipe_poll_add(ipolld ipd, int fd, int mask, void *user)
 
 	if (ps->num_fd >= ps->max_fd) {
 		i = (ps->max_fd <= 0)? 4 : ps->max_fd * 2;
-		if (ipv_resize(&ps->vresult, i * sizeof(struct epoll_event))) 
+		if (ipv_resize(&ps->vresult, i * sizeof(struct epoll_event) * 2))
 			return -1;
 		ps->mresult = (struct epoll_event*)ps->vresult.data;
 		ps->max_fd = i;
@@ -2830,19 +2854,16 @@ static int ipe_poll_set(ipolld ipd, int fd, int mask)
 	if (fd >= ps->usr_len) return -1;
 	if (ps->fv.fds[fd].fd < 0) return -2;
 
-	ps->fv.fds[fd].mask = 0;
+	ps->fv.fds[fd].mask = mask & (IPOLL_IN | IPOLL_OUT | IPOLL_ERR);
 
 	if (mask & IPOLL_IN) {
 		ee.events |= EPOLLIN;
-		ps->fv.fds[fd].mask |= IPOLL_IN;
 	}
 	if (mask & IPOLL_OUT) {
 		ee.events |= EPOLLOUT;
-		ps->fv.fds[fd].mask |= IPOLL_OUT;
 	}
 	if (mask & IPOLL_ERR) {
 		ee.events |= EPOLLERR | EPOLLHUP;
-		ps->fv.fds[fd].mask |= IPOLL_ERR;
 	}
 
 	retval = epoll_ctl(ps->epfd, EPOLL_CTL_MOD, fd, &ee);
@@ -2867,7 +2888,7 @@ static int ipe_poll_wait(ipolld ipd, int timeval)
 static int ipe_poll_event(ipolld ipd, int *fd, int *event, void **user)
 {
 	PSTRUCT *ps = PDESC(ipd);
-	struct epoll_event *ee;
+	struct epoll_event *ee, uu;
 	int revent = 0, n;
 
 	if (ps->cur_res >= ps->results) return -1;
@@ -2880,8 +2901,17 @@ static int ipe_poll_event(ipolld ipd, int *fd, int *event, void **user)
 	if (ee->events & EPOLLOUT) revent |= IPOLL_OUT;
 	if (ee->events & (EPOLLERR | EPOLLHUP)) revent |= IPOLL_ERR; 
 
-	if (ps->fv.fds[n].fd < 0) revent = 0;
-	revent &= ps->fv.fds[n].mask;
+	if (ps->fv.fds[n].fd < 0) {
+		revent = 0;
+		uu.data.fd = n;
+		uu.events = 0;
+		epoll_ctl(ps->epfd, EPOLL_CTL_DEL, n, &uu);
+	}	else {
+		revent &= ps->fv.fds[n].mask;
+		if (revent == 0) {
+			ipe_poll_set(ipd, n, ps->fv.fds[n].mask);
+		}
+	}
 
 	if (event) *event = revent;
 	if (user) *user = ps->fv.fds[n].user;
@@ -3258,8 +3288,350 @@ static int ipu_poll_event(ipolld ipd, int *fd, int *event, void **user)
 	if (revents & POLLERR)eventx |= IPOLL_ERR;
 
 	n = pfd->fd;
-	if (ps->fv.fds[n].fd < 0) eventx = 0;
-	eventx &= ps->fv.fds[n].mask;
+	if (ps->fv.fds[n].fd < 0) {
+		eventx = 0;
+		ipu_changes_push(ipd, n, POLLREMOVE);
+	}	else {
+		eventx &= ps->fv.fds[n].mask;
+		ipu_poll_set(ipd, n, ps->fv.fds[n].mask);
+	}
+
+	if (fd) *fd = n;
+	if (event) *event = eventx;
+	if (user) *user = ps->fv.fds[n].user;
+
+	return 0;
+}
+
+#endif
+
+
+/*===================================================================*/
+/* POLL DRIVER - POLLSET                                             */
+/*===================================================================*/
+
+#ifdef IHAVE_POLLSET
+
+#include <sys/poll.h>
+#include <sys/pollset.h>
+#include <errno.h>
+
+
+static int ipx_startup(void);
+static int ipx_shutdown(void);
+static int ipx_init_pd(ipolld ipd, int param);
+static int ipx_destroy_pd(ipolld ipd);
+static int ipx_poll_add(ipolld ipd, int fd, int mask, void *user);
+static int ipx_poll_del(ipolld ipd, int fd);
+static int ipx_poll_set(ipolld ipd, int fd, int mask);
+static int ipx_poll_wait(ipolld ipd, int timeval);
+static int ipx_poll_event(ipolld ipd, int *fd, int *event, void **user);
+
+
+/* pollset descriptor */
+typedef struct
+{
+	struct IPOLLFV fv;
+	pollset_t ps;
+	int num_fd;
+	int num_chg;
+	int max_fd;
+	int max_chg;
+	int results;
+	int cur_res;
+	int usr_len;
+	int limit;
+	struct pollfd *mresult;
+	struct poll_ctl *mchange;
+	struct IPVECTOR vresult;
+	struct IPVECTOR vchange;
+}	IPD_POLLSET;
+
+/* pollset driver */
+struct IPOLL_DRIVER IPOLL_POLLSET = {
+	sizeof (IPD_POLLSET),	
+	IDEVICE_POLLSET,
+	100,
+	"POLLSET",
+	ipx_startup,
+	ipx_shutdown,
+	ipx_init_pd,
+	ipx_destroy_pd,
+	ipx_poll_add,
+	ipx_poll_del,
+	ipx_poll_set,
+	ipx_poll_wait,
+	ipx_poll_event
+};
+
+
+#ifdef PSTRUCT
+#undef PSTRUCT
+#endif
+
+#define PSTRUCT IPD_POLLSET
+
+static int ipx_grow(PSTRUCT *ps, int size_fd, int size_chg);
+
+/* startup device */
+static int ipx_startup(void)
+{
+	pollset_t ps = pollset_create(-1);
+	if (ps < 0) return -1;
+	pollset_destroy(ps);
+	return 0;
+}
+
+/* destroy device */
+static int ipx_shutdown(void)
+{
+	return 0;
+}
+
+/* initialize poll fd */
+static int ipx_init_pd(ipolld ipd, int param)
+{
+	PSTRUCT *ps = PDESC(ipd);
+
+	ps->ps = pollset_create(-1);
+	if (ps->ps < 0) return -1;
+
+	ipv_init(&ps->vresult);
+	ipv_init(&ps->vchange);
+
+	ipoll_fvinit(&ps->fv);
+
+	ps->max_fd = 0;
+	ps->num_fd = 0;
+	ps->max_chg = 0;
+	ps->num_chg = 0;
+	ps->usr_len = 0;
+	ps->limit = 32000;
+	
+	if (ipx_grow(ps, 4, 4)) {
+		ipx_destroy_pd(ipd);
+		return -3;
+	}
+
+	return 0;
+}
+
+/* destroy poll fd */
+static int ipx_destroy_pd(ipolld ipd)
+{
+	PSTRUCT *ps = PDESC(ipd);
+	ipv_destroy(&ps->vresult);
+	ipv_destroy(&ps->vchange);
+	ipoll_fvdestroy(&ps->fv);
+
+	if (ps->ps >= 0) pollset_destroy(ps->ps);
+	ps->ps = -1;
+	return 0;
+}
+
+
+/* grow event list */
+static int ipx_grow(PSTRUCT *ps, int size_fd, int size_chg)
+{
+	int r;
+	if (size_fd >= 0) {
+		r = ipv_resize(&ps->vresult, size_fd * sizeof(struct pollfd) * 2);
+		ps->mresult = (struct pollfd*)ps->vresult.data;
+		ps->max_fd = size_fd;
+		if (r) return -1;
+	}
+	if (size_chg >= 0) {
+		r = ipv_resize(&ps->vchange, size_chg * sizeof(struct poll_ctl));
+		ps->mchange = (struct poll_ctl*)ps->vchange.data;
+		ps->max_chg= size_chg;
+		if (r) return -2;
+	}
+	return 0;
+}
+
+
+/* commit changes */
+static int ipx_changes_apply(ipolld ipd)
+{
+	PSTRUCT *ps = PDESC(ipd);
+	int num = ps->num_chg;
+	if (num == 0) return 0;
+	pollset_ctl(ps->ps, ps->mchange, num);
+	ps->num_chg = 0;
+	return 0;
+}
+
+/* register event */
+static int ipx_changes_push(ipolld ipd, int fd, int cmd, int events)
+{
+	PSTRUCT *ps = PDESC(ipd);
+	struct poll_ctl *ctl;
+
+	if (ps->num_chg >= ps->max_chg) {
+		if (ipx_grow(ps, -1, ps->max_chg * 2)) return -3;
+	}
+
+	if (ps->num_chg + 1 >= ps->limit) {
+		if (ipx_changes_apply(ipd) < 0) return -4;
+	}
+
+	ctl = &ps->mchange[ps->num_chg++];
+	memset(ctl, 0, sizeof(struct poll_ctl));
+
+	ctl->fd = fd;
+	ctl->events = events;
+	ctl->cmd = cmd;
+
+	return 0;
+}
+
+
+/* add fd */
+static int ipx_poll_add(ipolld ipd, int fd, int mask, void *user)
+{
+	PSTRUCT *ps = PDESC(ipd);
+	int usr_nlen, i, events;
+
+	if (ps->num_fd >= ps->max_fd) {
+		if (ipx_grow(ps, ps->max_fd * 2, -1)) return -1;
+	}
+
+	if (fd >= ps->usr_len) {
+		usr_nlen = fd + 128;
+		ipoll_fvresize(&ps->fv, usr_nlen);
+		for (i = ps->usr_len; i < usr_nlen; i++) {
+			ps->fv.fds[i].fd = -1;
+			ps->fv.fds[i].user = NULL;
+			ps->fv.fds[i].mask = 0;
+		}
+		ps->usr_len = usr_nlen;
+	}
+
+	if (ps->fv.fds[fd].fd >= 0) {
+		ps->fv.fds[fd].user = user;
+		ipx_poll_set(ipd, fd, mask);
+		return 0;
+	}
+
+	events = 0;
+	mask = mask & (IPOLL_IN | IPOLL_OUT | IPOLL_ERR);
+
+	if (mask & IPOLL_IN) events |= POLLIN;
+	if (mask & IPOLL_OUT) events |= POLLOUT;
+	if (mask & IPOLL_ERR) events |= POLLERR;
+
+	ps->fv.fds[fd].fd = fd;
+	ps->fv.fds[fd].user = user;
+	ps->fv.fds[fd].mask = mask & (IPOLL_IN | IPOLL_OUT | IPOLL_ERR);
+
+	if (ipx_changes_push(ipd, fd, PS_ADD, events) < 0) {
+		return -2;
+	}
+
+	ps->num_fd++;
+
+	return 0;
+}
+
+/* remove fd */
+static int ipx_poll_del(ipolld ipd, int fd)
+{
+	PSTRUCT *ps = PDESC(ipd);
+
+	if (ps->num_fd <= 0) return -1;
+	if (ps->fv.fds[fd].fd < 0) return -2;
+	
+	ipx_changes_push(ipd, fd, PS_DELETE, 0);
+
+	ps->num_fd--;
+	ps->fv.fds[fd].fd = -1;
+	ps->fv.fds[fd].user = NULL;
+	ps->fv.fds[fd].mask = 0;
+
+	ipx_changes_apply(ipd);
+
+	return 0;
+}
+
+/* set event mask */
+static int ipx_poll_set(ipolld ipd, int fd, int mask)
+{
+	PSTRUCT *ps = PDESC(ipd);
+	int events = 0;
+	int retval = 0;
+
+	if (fd >= ps->usr_len) return -1;
+	if (ps->fv.fds[fd].fd < 0) return -2;
+
+	mask =  mask & (IPOLL_IN | IPOLL_OUT | IPOLL_ERR);
+
+	ps->fv.fds[fd].mask = mask;
+
+	if (mask & IPOLL_IN) events |= POLLIN;
+	if (mask & IPOLL_OUT) events |= POLLOUT;
+	if (mask & IPOLL_ERR) events |= POLLERR;
+
+	retval = ipx_changes_push(ipd, fd, PS_DELETE, 0);
+	if (events != 0) {
+		retval = ipx_changes_push(ipd, fd, PS_MOD, events);
+	}
+
+	return retval;
+}
+
+/* polling */
+static int ipx_poll_wait(ipolld ipd, int timeval)
+{
+	PSTRUCT *ps = PDESC(ipd);
+	int retval;
+
+	if (ps->num_chg) {
+		ipx_changes_apply(ipd);
+	}
+
+	retval = pollset_poll(ps->ps, ps->mresult, ps->max_fd * 2, timeval);
+
+	if (retval < 0) {
+		if (errno != EINTR) {
+			return -1;
+		}
+		return 0;
+	}
+
+	ps->results = retval;
+	ps->cur_res = 0;
+
+	return ps->results;
+}
+
+/* query event */
+static int ipx_poll_event(ipolld ipd, int *fd, int *event, void **user)
+{
+	PSTRUCT *ps = PDESC(ipd);
+	int revents, eventx = 0, n;
+	struct pollfd *pfd;
+	if (ps->results <= 0) return -1;
+	if (ps->cur_res >= ps->results) return -2;
+	pfd = &ps->mresult[ps->cur_res++];
+
+	revents = pfd->revents;
+	if (revents & POLLIN) eventx |= IPOLL_IN;
+	if (revents & POLLOUT)eventx |= IPOLL_OUT;
+	if (revents & POLLERR)eventx |= IPOLL_ERR;
+
+	n = pfd->fd;
+	if (ps->fv.fds[n].fd < 0) {
+		eventx = 0;
+		ipx_changes_push(ipd, n, PS_DELETE, 0);
+	}	else {
+		eventx &= ps->fv.fds[n].mask;
+		if (eventx == 0) {
+			ipx_changes_push(ipd, n, PS_DELETE, 0);
+			if (ps->fv.fds[n].mask != 0) {
+				ipx_changes_push(ipd, n, PS_MOD, ps->fv.fds[n].mask);
+			}
+		}
+	}
 
 	if (fd) *fd = n;
 	if (event) *event = eventx;
@@ -5313,123 +5685,6 @@ void iposix_date_make(IINT64 *BCD, int year, int mon, int mday, int wday,
 	bcd |= ((IINT64)mon) << 35;
 	bcd |= ((IINT64)year) << 48;
 	BCD[0] = bcd;
-}
-
-/* format date time */
-char *iposix_date_format(const char *fmt, IINT64 datetime, char *dst)
-{
-	static char buffer[128];
-	char *out = dst;
-
-	static const char *weekday1[7] = { "Sun", "Mon", "Tus", "Wed", "Thu", 
-		"Fri", "Sat" };
-	static const char *weekday2[7] = { "Sunday", "Monday", "Tuesday", 
-		"Wednesday", "Thurday", "Friday", "Saturday" };
-	static const char *month1[13] = { "", "Jan", "Feb", "Mar", "Apr", "May",
-		"Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-	static const char *month2[13] = { "", "January", "February", "March", 
-		"April", "May", "June", "July", "August", "September", 
-		"October", "November", "December" };
-
-	if (dst == NULL) {
-		dst = buffer;
-		out = buffer;
-	}
-
-	while (fmt[0]) {
-		char ch = *fmt++;
-		if (ch == '%') {
-			ch = *fmt++;
-			if (ch == 0) {
-				*out++ = '%';
-				break;
-			}
-			switch (ch)
-			{
-			case '%':
-				*out++ = '%';
-				break;
-			case 'a':
-				sprintf(out, "%s", weekday1[iposix_time_wday(datetime)]);
-				out += strlen(weekday1[iposix_time_wday(datetime)]);
-				break;
-			case 'A':
-				sprintf(out, "%s", weekday2[iposix_time_wday(datetime)]);
-				out += strlen(weekday2[iposix_time_wday(datetime)]);
-				break;
-			case 'b':
-				sprintf(out, "%s", month1[iposix_time_mon(datetime)]);
-				out += strlen(month1[iposix_time_mon(datetime)]);
-				break;
-			case 'B':
-				sprintf(out, "%s", month2[iposix_time_mon(datetime)]);
-				out += strlen(month2[iposix_time_mon(datetime)]);
-				break;
-			case 'Y':
-				sprintf(out, "%04d", iposix_time_year(datetime));
-				out += 4;
-				break;
-			case 'y':
-				sprintf(out, "%02d", iposix_time_year(datetime) % 100);
-				out += 2;
-				break;
-			case 'm':
-				sprintf(out, "%02d", iposix_time_mon(datetime));
-				out += 2;
-				break;
-			case 'D':
-				sprintf(out, "%02d", iposix_time_wday(datetime));
-				out += 2;
-				break;
-			case 'd':
-				sprintf(out, "%02d", iposix_time_mday(datetime));
-				out += 2;
-				break;
-			case 'H':
-				sprintf(out, "%02d", iposix_time_hour(datetime));
-				out += 2;
-				break;
-			case 'h':
-				sprintf(out, "%02d", iposix_time_hour(datetime) % 12);
-				out += 2;
-				break;
-			case 'M':
-				sprintf(out, "%02d", iposix_time_min(datetime));
-				out += 2;
-				break;
-			case 'S':
-			case 's':
-				sprintf(out, "%02d", iposix_time_sec(datetime));
-				out += 2;
-				break;
-			case 'F':
-			case 'f':
-				sprintf(out, "%03d", iposix_time_ms(datetime));
-				out += 3;
-				break;
-			case 'p':
-			case 'P':
-				if (iposix_time_hour(datetime) < 12) {
-					sprintf(out, "AM");
-				}	else {
-					sprintf(out, "PM");
-				}
-				out += 2;
-				break;
-			default:
-				*out++ = '%';
-				*out++ = ch;
-				break;
-			}
-		}
-		else {
-			*out++ = ch;
-		}
-	}
-
-	*out++ = 0;
-
-	return dst;
 }
 
 
