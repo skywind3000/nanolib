@@ -1062,6 +1062,7 @@ void async_core_delete(CAsyncCore *core)
 	ASYNC_CORE_CRITICAL_END(core);
 	IMUTEX_DESTROY(&core->xmtx);
 	IMUTEX_DESTROY(&core->lock);
+	IMUTEX_DESTROY(&core->xmsg);
 	memset(core, 0, sizeof(CAsyncCore));
 	ikmem_free(core);
 }
