@@ -1273,9 +1273,11 @@ static int async_core_msg_push(CAsyncCore *core, int event, long wparam,
 	iencode16u_lsb(head + 4, (unsigned short)event);
 	iencode32i_lsb(head + 6, wparam);
 	iencode32i_lsb(head + 10, lparam);
+	if (core->nolock == 0) IMUTEX_LOCK(&core->xmsg);
 	ims_write(&core->msgs, head, 14);
 	ims_write(&core->msgs, data, size);
 	core->msgcnt++;
+	if (core->nolock == 0) IMUTEX_UNLOCK(&core->xmsg);
 	return 0;
 }
 
@@ -1293,11 +1295,29 @@ static long async_core_msg_read(CAsyncCore *core, int *event, long *wparam,
 	int EVENT;
 	long WPARAM;
 	long LPARAM;
-	if (ims_peek(&core->msgs, head, 4) < 4) return -1;
+	if (core->nolock == 0) {
+		IMUTEX_LOCK(&core->xmsg);
+	}
+	if (ims_peek(&core->msgs, head, 4) < 4) {
+		if (core->nolock == 0) {
+			IMUTEX_UNLOCK(&core->xmsg);
+		}
+		return -1;
+	}
 	idecode32u_lsb(head, &length);
 	length -= 14;
-	if (data == NULL) return length;
-	if (size < (long)length) return -2;
+	if (data == NULL) {
+		if (core->nolock == 0) {
+			IMUTEX_UNLOCK(&core->xmsg);
+		}
+		return length;
+	}
+	if (size < (long)length) {
+		if (core->nolock == 0) {
+			IMUTEX_UNLOCK(&core->xmsg);
+		}
+		return -2;
+	}
 	ims_read(&core->msgs, head, 14);
 	idecode16u_lsb(head + 4, &y);
 	EVENT = y;
@@ -1306,6 +1326,9 @@ static long async_core_msg_read(CAsyncCore *core, int *event, long *wparam,
 	idecode32i_lsb(head + 10, &x);
 	LPARAM = x;
 	ims_read(&core->msgs, data, length);
+	if (core->nolock == 0) {
+		IMUTEX_UNLOCK(&core->xmsg);
+	}
 	if (event) event[0] = EVENT;
 	if (wparam) wparam[0] = WPARAM;
 	if (lparam) lparam[0] = LPARAM;
@@ -2010,15 +2033,7 @@ int async_core_notify(CAsyncCore *core)
 long async_core_read(CAsyncCore *core, int *event, long *wparam,
 	long *lparam, void *data, long size)
 {
-	long hr = 0;
-	if (core->nolock == 0) {
-		IMUTEX_LOCK(&core->xmsg);
-	}
-	hr = async_core_msg_read(core, event, wparam, lparam, data, size);
-	if (core->nolock == 0) {
-		IMUTEX_UNLOCK(&core->xmsg);
-	}
-	return hr;
+	return async_core_msg_read(core, event, wparam, lparam, data, size);
 }
 
 
@@ -2028,13 +2043,7 @@ long async_core_read(CAsyncCore *core, int *event, long *wparam,
 int async_core_push(CAsyncCore *core, int event, long wparam, long lparam, 
 	const char *data, long size)
 {
-	if (core->nolock == 0) {
-		IMUTEX_LOCK(&core->xmsg);
-	}
 	async_core_msg_push(core, event, wparam, lparam, data, size);
-	if (core->nolock == 0) {
-		IMUTEX_UNLOCK(&core->xmsg);
-	}
 	return 0;
 }
 
