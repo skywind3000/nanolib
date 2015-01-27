@@ -863,6 +863,7 @@ struct CAsyncCore
 	int nolock;
 	IMUTEX_TYPE lock;
 	IMUTEX_TYPE xmtx;
+	IMUTEX_TYPE xmsg;
 	IUINT32 current;
 	IUINT32 lastsec;
 	IUINT32 timeout;
@@ -966,6 +967,7 @@ CAsyncCore* async_core_new(int flags)
 
 	IMUTEX_INIT(&core->lock);
 	IMUTEX_INIT(&core->xmtx);
+	IMUTEX_INIT(&core->xmsg);
 	
 	core->nolock = ((flags & 1) == 0)? 0 : 1;
 
@@ -1034,6 +1036,9 @@ void async_core_delete(CAsyncCore *core)
 		ipoll_delete(core->pfd);
 		core->pfd = NULL;
 	}
+	IMUTEX_LOCK(&core->xmsg);
+	ims_destroy(&core->msgs);
+	IMUTEX_UNLOCK(&core->xmsg);
 	if (core->vector) iv_delete(core->vector);
 	if (core->nodes) imnode_delete(core->nodes);
 	if (core->cache) imnode_delete(core->cache);
@@ -2005,11 +2010,45 @@ long async_core_read(CAsyncCore *core, int *event, long *wparam,
 	long *lparam, void *data, long size)
 {
 	long hr = 0;
-	ASYNC_CORE_CRITICAL_BEGIN(core);
+	if (core->nolock == 0) {
+		IMUTEX_LOCK(&core->xmsg);
+	}
 	hr = async_core_msg_read(core, event, wparam, lparam, data, size);
-	ASYNC_CORE_CRITICAL_END(core);
+	if (core->nolock == 0) {
+		IMUTEX_UNLOCK(&core->xmsg);
+	}
 	return hr;
 }
+
+
+/*-------------------------------------------------------------------*/
+/* push message to msg queue                                         */
+/*-------------------------------------------------------------------*/
+int async_core_push(CAsyncCore *core, int event, long wparam, long lparam, 
+	const char *data, long size)
+{
+	if (core->nolock == 0) {
+		IMUTEX_LOCK(&core->xmsg);
+	}
+	async_core_msg_push(core, event, wparam, lparam, data, size);
+	if (core->nolock == 0) {
+		IMUTEX_UNLOCK(&core->xmsg);
+	}
+	return 0;
+}
+
+
+/*-------------------------------------------------------------------*/
+/* queue an ASYNC_CORE_EVT_PUSH event and wake async_core_wait up    */
+/*-------------------------------------------------------------------*/
+int async_core_post(CAsyncCore *core, long wparam, long lparam, 
+	const char *data, long size)
+{
+	async_core_push(core, ASYNC_CORE_EVT_PUSH, wparam, lparam, data, size);
+	async_core_notify(core);
+	return 0;
+}
+
 
 /*-------------------------------------------------------------------*/
 /* get node mode: ASYNC_CORE_NODE_IN/OUT/LISTEN4/LISTEN6/ASSIGN      */

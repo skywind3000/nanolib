@@ -199,6 +199,7 @@ typedef struct CAsyncCore CAsyncCore;
 #define ASYNC_CORE_EVT_ESTAB	2	/* estab: (hid, tag) */
 #define ASYNC_CORE_EVT_DATA		3	/* data: (hid, tag)  */
 #define ASYNC_CORE_EVT_PROGRESS	4	/* output progress: (hid, tag) */
+#define ASYNC_CORE_EVT_PUSH		5	/* msg from async_core_push */
 
 #define ASYNC_CORE_NODE_IN			1		/* accepted node */
 #define ASYNC_CORE_NODE_OUT			2		/* connected out node */
@@ -227,7 +228,7 @@ void async_core_delete(CAsyncCore *core);
  */
 void async_core_wait(CAsyncCore *core, IUINT32 millisec);
 
-/* wake-up async_core_wait, returns zero for success */
+/* wake async_core_wait up, returns zero for success */
 int async_core_notify(CAsyncCore *core);
 
 /**
@@ -262,6 +263,10 @@ long async_core_new_listen(CAsyncCore *core, const struct sockaddr *addr,
 /* new assign to a existing socket, returns hid */
 long async_core_new_assign(CAsyncCore *core, int fd, int header, int estab);
 
+
+/* queue an ASYNC_CORE_EVT_PUSH event and wake async_core_wait up */
+int async_core_post(CAsyncCore *core, long wparam, long lparam, 
+	const char *data, long size);
 
 /* get node mode: ASYNC_CORE_NODE_IN/OUT/LISTEN4/LISTEN6/ASSIGN */
 int async_core_get_mode(const CAsyncCore *core, long hid);
