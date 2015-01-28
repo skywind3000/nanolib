@@ -42,6 +42,10 @@
 #ifndef __SYSTEM_H__
 #define __SYSTEM_H__
 
+#include <string>
+#include <vector>
+#include <iostream>
+
 #include "imembase.h"
 #include "imemdata.h"
 #include "inetbase.h"
@@ -64,10 +68,6 @@
 #ifndef __cplusplus
 #error This file must be compiled in C++ mode !!
 #endif
-
-#include <string>
-#include <vector>
-#include <iostream>
 
 NAMESPACE_BEGIN(System)
 
@@ -169,8 +169,22 @@ protected:
 class CriticalScope
 {
 public:
-	CriticalScope(CriticalSection &c): _critical(&c) { c.enter(); }
-	virtual ~CriticalScope() { _critical->leave(); }
+	CriticalScope(CriticalSection &c): _critical(&c) 
+	{ 
+		if (_critical)
+		{
+			_critical->enter();
+		}
+	}
+
+	virtual ~CriticalScope() 
+	{ 
+		if (_critical)
+		{
+			_critical->leave();
+			_critical = NULL;
+		}
+	}
 
 protected:
 	CriticalSection *_critical;
@@ -286,17 +300,17 @@ class ConditionLock
 public:
 
 	// 唤醒所有等待进程
-	void notify(bool all = false) { if (!all) _cond.wake(); else _cond.wake_all(); }
+	void wake(bool all = false) { if (!all) _cond.wake(); else _cond.wake_all(); }
 
 	// 等待若干毫秒，成功返回 true
-	bool wait(unsigned long millisec) { return _cond.sleep(_lock, millisec); }
-	bool wait() { return _cond.sleep(_lock); }
+	bool sleep(unsigned long millisec) { return _cond.sleep(_lock, millisec); }
+	bool sleep() { return _cond.sleep(_lock); }
 
 	// 进入临界区
-	void acquire() { _lock.enter(); }
+	void enter() { _lock.enter(); }
 
 	// 释放临界区
-	void release() { _lock.leave(); }
+	void leave() { _lock.leave(); }
 
 private:
 	ConditionVariable _cond;
@@ -1200,6 +1214,7 @@ protected:
 };
 
 
+#ifndef __AVM2__
 //---------------------------------------------------------------------
 // URL 请求封装
 //---------------------------------------------------------------------
@@ -1273,7 +1288,7 @@ public:
 protected:
 	IURLD *_urld;
 };
-
+#endif
 
 //---------------------------------------------------------------------
 // CSV READER
