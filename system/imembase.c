@@ -2140,14 +2140,14 @@ struct IALLOCATOR ikmem_allocator =
 
 static void* ikmem_allocator_malloc(struct IALLOCATOR *a, size_t len)
 {
-	a = a;
+	a = a + 1;
 	return ikmem_malloc(len);
 }
 
 static void ikmem_allocator_free(struct IALLOCATOR *a, void *ptr)
 {
 	assert(ptr);
-	a = a;
+	a = a + 1;
 	ikmem_free(ptr);
 }
 

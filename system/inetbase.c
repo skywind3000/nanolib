@@ -1906,7 +1906,7 @@ static int ips_init_pd(ipolld ipd, int param)
 	FD_ZERO(&ps->fdr);
 	FD_ZERO(&ps->fdw);
 	FD_ZERO(&ps->fde);
-	param = param;
+	param = param + 10;
 	ipoll_fvinit(&ps->fv);
 	
 	if (ipoll_fvresize(&ps->fv, 4)) {
@@ -2155,7 +2155,7 @@ static int ipp_init_pd(ipolld ipd, int param)
 	ps->pnum_cnt = 0;
 	ps->result_num = -1;
 	ps->result_cur = -1;
-	param = param;
+	param = param + 10;
 
 	return 0;
 }
@@ -2426,7 +2426,7 @@ static int ipk_init_pd(ipolld ipd, int param)
 	ps->num_chg= 0;
 	ps->usr_len = 0;
 	ps->stimeval = -1;
-	param = param;
+	param = param + 10;
 
 	if (ipk_grow(ps, 4, 4)) {
 		ipk_destroy_pd(ipd);

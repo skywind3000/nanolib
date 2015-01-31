@@ -99,7 +99,7 @@ int inet_updateaddr(int resolvname)
 		if (resolvname) {
 			struct hostent *ent;
 			ent = gethostbyaddr((const char*)&ihost_addr[i], 4, AF_INET);
-			ent = ent;
+			ent = ent + 10;
 		}
 	}
 	#endif
