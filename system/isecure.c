@@ -9,7 +9,7 @@
 //
 //=====================================================================
 #include "isecure.h"
-
+#include <stdlib.h>
 
 //=====================================================================
 // INLINE
@@ -144,6 +144,8 @@ static inline const char *is_decode32u_msb(const char *p, unsigned long *l)
 	p += 4;
 	return p;
 }
+
+
 
 //=====================================================================
 // MD5
@@ -614,4 +616,190 @@ IUINT32 hash_crc32(const void *in, size_t len)
 	result ^= 0xffffffff;  
 	return result;
 }
+
+
+//=====================================================================
+// Diffie-Hellman key exchange
+//=====================================================================
+
+// Russian Peasant multiplication
+// http://en.wikipedia.org/wiki/Ancient_Egyptian_multiplication
+// returns (a * b) % c
+static inline IUINT64 DH_MulMod(IUINT64 a, IUINT64 b, IUINT64 c)
+{
+	IUINT64 x = 0;
+#if (!defined(__GNUC__)) || (!defined(__amd64__))
+	if (a >= c) a %= c;
+	if (b >= c) b %= c;
+	if (a == 0) return 0;
+	if (b == 0) return 0;
+	if (a <= b) { x = a; a = b; b = x; x = 0; }
+	while (b) {
+		if (b & 1) {
+			IUINT64 t = c - a;
+			if ( x >= t) x -= t;
+			else x += a;
+		}
+		if (a >= c - a) a = a + a - c;
+		else a = a + a;
+		b >>= 1;
+	}
+#else	// 10x times faster in amd64
+	__asm__ __volatile__ (
+		"mov %1, %%rax;\n"   
+		"mul %2;\n"      
+		"div %3;\n" 
+		"mov %%rdx, %0;\n"
+		:"=r"(x) 
+		:"r"(a), "r"(b), "r"(c)
+		:"%rax", "%rdx", "memory"
+	);
+#endif
+	return x;
+}
+
+// Right-to-left binary method
+// http://en.wikipedia.org/wiki/Modular_exponentiation
+// calculate (a ^ b) % c
+IUINT64 DH_PowerMod(IUINT64 a, IUINT64 b, IUINT64 c)
+{
+	IUINT64 x = 1;
+	if (a >= c) a %= c;
+	if (b >= c) b %= c;
+	if (b == 0) return 1;
+	if (b == 1) return a;
+	if (a == 0) return 0;
+	if (a == 1) return 1;
+	if (c == 0) return 0;
+	while (b > 0) {
+        if (b & 1) x = DH_MulMod(x, a, c);
+		a = DH_MulMod(a, a, c);
+		b >>= 1;
+	}
+	return x;
+}
+
+// returns random local key
+IUINT64 DH_Random()
+{
+	IUINT64 x = ((rand() << 16) ^ rand()) & 0x7fffffff;
+	IUINT64 y = ((rand() << 16) ^ rand()) & 0x7fffffff;
+	return (x << 32) | y;
+}
+
+// calculate A/B which will be sent to remote
+IUINT64 DH_Exchange(IUINT64 local)
+{
+	IUINT64 x = 0x7fffffff;
+	IUINT64 y = 0xffffffe7;
+	IUINT64 p = (x << 32) | y;	// 	0x7fffffffffffffe7L
+	return DH_PowerMod(5, local, p);
+}
+
+// get final symmetrical-key from local key and remote A/B
+IUINT64 DH_Final(IUINT64 local, IUINT64 remote)
+{
+	IUINT64 x = 0x7fffffff;
+	IUINT64 y = 0xffffffe7;
+	IUINT64 p = (x << 32) | y;	// 	0x7fffffffffffffe7L
+	return DH_PowerMod(remote, local, p);
+}
+
+// get qword from hex string 
+void DH_STR_TO_U64(const char *str, IUINT64 *x)
+{
+	IUINT64 a = 0, b;
+	int i;
+	for (i = 0; str[i]; i++) {
+		char c = str[i];
+		if (c >= '0' && c <= '9') b = c - '0';
+		else if (c >= 'A' && c <= 'F') b = c - 'A' + 10;
+		else if (c >= 'a' && c <= 'f') b = c - 'a' + 10;
+		else b = 0;
+		a = (a << 16) | b;
+	}
+	x[0] = a;
+}
+
+// hex string from qword, capacity of str must above 17
+void DH_U64_TO_STR(IUINT64 x, char *str)
+{
+	static const char hex[] = "0123456789abcdef";
+	int i;
+	for (i = 0; i < 16; i++) {
+		int y = (int)((x >> ((15 - i) * 4)) & 0xf);
+		str[i] = hex[y];
+	}
+	str[16] = 0;
+}
+
+
+//=====================================================================
+// CRYPTO RC4
+//=====================================================================
+
+void CRYPTO_RC4_Init(CRYPTO_RC4_CTX *ctx, const void *key, int keylen)
+{
+	int X, Y, i, j, k, a;
+	unsigned char *box;
+	box = ctx->box;
+	if (keylen <= 0 || key == NULL) {
+		X = -1;
+		Y = -1;
+	}	else {
+		X = Y = j = k = 0;
+		for (i = 0; i < 256; i++) 
+			box[i] = (unsigned char)i;
+		for (i = 0; i < 256; i++) {
+			a = box[i];
+			j = (unsigned char)(j + a + ((const unsigned char*)key)[k]);
+			box[i] = box[j];
+			box[j] = a;
+			if (++k >= keylen) k = 0;
+		}
+	}
+	ctx->x = X;
+	ctx->y = Y;
+}
+
+void CRYPTO_RC4_Apply(CRYPTO_RC4_CTX *ctx, const void *in, void *out, 
+	size_t size)
+{
+	const unsigned char *src = (const unsigned char*)in;
+	unsigned char *dst = (unsigned char*)out;
+	unsigned char *box = ctx->box;
+	int X = ctx->x;
+	int Y = ctx->y;
+	if (X < 0 || Y < 0) {			/* no crypt */
+		if (src != dst) 
+			memmove(dst, src, size);
+	}	else {						/* crypt */
+		int a, b; 
+		for (; size > 0; src++, dst++, size--) {
+			X = (unsigned char)(X + 1);
+			a = box[X];
+			Y = (unsigned char)(Y + a);
+			box[X] = box[Y];
+			b = box[Y];
+			box[Y] = a;
+			dst[0] = src[0] ^ box[(unsigned char)(a + b)];
+		}
+		ctx->x = X;
+		ctx->y = Y;
+	}
+}
+
+
+void CRYPTO_RC4_Crypto(const void *key, int keylen, const void *in,
+	void *out, size_t size, int ntimes)
+{
+	const void *src = in;
+	CRYPTO_RC4_CTX ctx;
+	CRYPTO_RC4_Init(&ctx, key, keylen);
+	for (; ntimes > 0; ntimes--) {
+		CRYPTO_RC4_Apply(&ctx, src, out, size);
+		src = out;
+	}
+}
+
 

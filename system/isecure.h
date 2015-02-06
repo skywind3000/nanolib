@@ -211,6 +211,51 @@ IUINT32 hash_crc32(const void *in, size_t len);
 #define cal_crc32 hash_crc32
 
 
+
+//=====================================================================
+// Diffie-Hellman key exchange
+// http://zh.wikipedia.org/wiki/Diffie%E2%80%93Hellman_key_exchange
+// usage: 1. get an local asymmetric-key a from DH_Random
+//        2. calculate A=(5 ^ a) % p by DH_Exchange 
+//        3. send A to remote
+//        4. obtain symmetrical-key by DH_Key(local_key, RemoteA)
+//=====================================================================
+
+// returns random local key
+IUINT64 DH_Random();
+
+// calculate A/B which will be sent to remote
+IUINT64 DH_Exchange(IUINT64 local);
+
+// get final symmetrical-key from local key and remote A/B
+IUINT64 DH_Final(IUINT64 local, IUINT64 remote);
+
+// get qword from hex string 
+void DH_STR_TO_U64(const char *str, IUINT64 *x);
+
+// hex string from qword, capacity of str must above 17
+void DH_U64_TO_STR(IUINT64 x, char *str);
+
+
+//=====================================================================
+// CRYPTO RC4
+//=====================================================================
+typedef struct {
+	int x;
+	int y;
+	unsigned char box[256];
+}	CRYPTO_RC4_CTX;
+
+
+void CRYPTO_RC4_Init(CRYPTO_RC4_CTX *ctx, const void *key, int keylen);
+
+void CRYPTO_RC4_Apply(CRYPTO_RC4_CTX *ctx, const void *in, void *out, 
+	size_t size);
+
+void CRYPTO_RC4_Crypto(const void *key, int keylen, const void *in,
+	void *out, size_t size, int ntimes);
+
+
 #ifdef __cplusplus
 }
 #endif
