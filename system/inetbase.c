@@ -309,6 +309,122 @@ int ithread_kill(ilong id)
 	return retval;
 }
 
+/* thread once init, *control and *once must be 0  */
+void ithread_once(int *control, void (*run_once)(void))
+{
+	volatile int *ctrl = (volatile int *)control;
+#if defined(WIN32) || defined(_WIN32) || defined(_WIN64) || defined(WIN64)
+	static DWORD align_dwords[20] = { 
+		0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 };
+	unsigned char *align_ptr = (unsigned char*)align_dwords;
+	static volatile int init_mutex = 0;
+	static IMUTEX_TYPE mutex;
+	if (init_mutex == 0) {
+		LONG *once;
+		LONG last = 0;
+		while (((size_t)align_ptr) & 63) align_ptr++;
+		once = (LONG*)align_ptr;
+		last = InterlockedExchange(once, 1);
+		if (last == 0) {
+			IMUTEX_INIT(&mutex);
+			init_mutex = 1;
+		}	else {
+			while (init_mutex == 0) Sleep(1);
+		}
+	}
+	IMUTEX_LOCK(&mutex);
+	if (ctrl[0] == 0) {
+		if (run_once) 
+			run_once();
+		ctrl[0] = 1;
+	}
+	IMUTEX_UNLOCK(&mutex);
+#elif defined(__unix) || defined(__unix__) || defined(__MACH__)
+	static pthread_mutex_t minit = PTHREAD_MUTEX_INITIALIZER;
+	static pthread_mutex_t mutex;
+	static int mutex_init = 0;
+	pthread_mutex_lock(&minit);
+	if (mutex_init == 0) {
+		pthread_mutexattr_t attr;
+		if (pthread_mutexattr_init(&attr) == 0) {
+			if (pthread_mutexattr_settype(&attr, 
+				PTHREAD_MUTEX_RECURSIVE) == 0) {
+				if (pthread_mutex_init(&mutex, &attr) == 0) {
+					mutex_init = 1;
+				}
+			}
+		}
+		if (mutex_init == 0) {
+			IMUTEX_INIT(&mutex);
+		}
+		mutex_init = 1;
+	}
+	pthread_mutex_unlock(&minit);
+	pthread_mutex_lock(&mutex);
+	if (ctrl[0] == 0) {
+		if (run_once) 
+			run_once();
+		ctrl[0] = 1;
+	}
+	pthread_mutex_unlock(&mutex);
+#else
+	if (ctrl[0] == 0) {
+		if (run_once) 
+			run_once();
+		ctrl[0] = 1;
+	}
+#endif
+}
+
+
+/* thread once init, *control and *once must be 0  */
+static void internal_run_once(int *control, void (*run_once)(void))
+{
+	volatile int *ctrl = (volatile int *)control;
+#if defined(WIN32) || defined(_WIN32) || defined(_WIN64) || defined(WIN64)
+	static DWORD align_dwords[20] = { 
+		0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 };
+	unsigned char *align_ptr = (unsigned char*)align_dwords;
+	static volatile int init_mutex = 0;
+	static IMUTEX_TYPE mutex;
+	if (init_mutex == 0) {
+		LONG *once;
+		LONG last = 0;
+		while (((size_t)align_ptr) & 63) align_ptr++;
+		once = (LONG*)align_ptr;
+		last = InterlockedExchange(once, 1);
+		if (last == 0) {
+			IMUTEX_INIT(&mutex);
+			init_mutex = 1;
+		}	else {
+			while (init_mutex == 0) Sleep(1);
+		}
+	}
+	IMUTEX_LOCK(&mutex);
+	if (ctrl[0] == 0) {
+		if (run_once) 
+			run_once();
+		ctrl[0] = 1;
+	}
+	IMUTEX_UNLOCK(&mutex);
+#elif defined(__unix) || defined(__unix__) || defined(__MACH__)
+	static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+	pthread_mutex_lock(&mutex);
+	if (ctrl[0] == 0) {
+		if (run_once) 
+			run_once();
+		ctrl[0] = 1;
+	}
+	pthread_mutex_unlock(&mutex);
+#else
+	if (ctrl[0] == 0) {
+		if (run_once) 
+			run_once();
+		ctrl[0] = 1;
+	}
+#endif
+}
+
 
 
 /*===================================================================*/
@@ -1661,12 +1777,23 @@ const char *ipoll_name(void)
 	return IPOLLDRV.name;
 }
 
+/* once init */
+static void ipoll_once_init(void)
+{
+	if (ipoll_inited == 0) {
+		ipoll_init(IDEVICE_AUTO);
+	}
+}
+
 /* pfd create */
 int ipoll_create(ipolld *ipd, int param)
 {
 	ipolld pd;
 
-	if (ipoll_inited == 0) ipoll_init(IDEVICE_AUTO);
+	if (ipoll_inited == 0) {
+		static int once = 0;
+		internal_run_once(&once, ipoll_once_init);
+	}
 
 	assert(ipd && ipoll_inited);
 	if (ipd == NULL || ipoll_inited == 0) return -1;
@@ -3690,11 +3817,9 @@ static HINSTANCE iposix_kernel32 = NULL;
 static int iposix_cond_win32_inited = 0;
 static int iposix_cond_win32_vista = 0;
 
-/* initialize win32 cv */
-static int iposix_cond_win32_init(iConditionVariableWin32 *cond)
+/* initialize once */
+static void iposix_cond_win32_once(void)
 {
-	cond->eventid = IWAKEALL_0;
-
 	if (iposix_cond_win32_inited == 0) {
 		if (iposix_kernel32 == NULL) {
 			iposix_kernel32 = LoadLibraryA("Kernel32.dll");
@@ -3723,6 +3848,17 @@ static int iposix_cond_win32_init(iConditionVariableWin32 *cond)
 			}
 		}
 		iposix_cond_win32_inited = 1;
+	}
+}
+
+/* initialize win32 cv */
+static int iposix_cond_win32_init(iConditionVariableWin32 *cond)
+{
+	cond->eventid = IWAKEALL_0;
+
+	if (iposix_cond_win32_inited == 0) {
+		static int once = 0;
+		internal_run_once(&once, iposix_cond_win32_once);
 	}
 
 	if (iposix_cond_win32_vista == 0) {
@@ -4497,6 +4633,13 @@ static int iposix_thread_init(void)
 	return retval;
 }
 
+/* initialize thread state and local storage */
+static void iposix_thread_once_init(void)
+{
+	if (iposix_thread_inited == 0) {
+		iposix_thread_init();
+	}
+}
 
 /* Thread Entry Point, it will be called repeatly after started until
    it returns zero, or iposix_thread_set_notalive is called. */
@@ -4517,6 +4660,8 @@ iPosixThread *iposix_thread_new(iPosixThreadFun target, void *obj,
 #endif
 
 	if (iposix_thread_inited == 0) {
+		static int once = 0;
+		internal_run_once(&once, iposix_thread_once_init);
 		if (iposix_thread_init() != 0) return NULL;
 	}
 

@@ -933,8 +933,6 @@ CAsyncCore* async_core_new(int flags)
 		return NULL;
 	}
 
-	ipoll_init(IDEVICE_AUTO);
-
 	if (ipoll_create(&core->pfd, 20000) != 0) {
 		imnode_delete(core->nodes);
 		imnode_delete(core->cache);

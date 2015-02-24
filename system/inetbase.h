@@ -486,6 +486,9 @@ int ithread_detach(ilong id);
 /* kill thread */
 int ithread_kill(ilong id);
 
+/* thread once init, *control must be 0 */
+void ithread_once(int *control, void (*run_once)(void));
+
 
 /*===================================================================*/
 /* Cross-Platform Mutex Interface                                    */
