@@ -385,8 +385,20 @@ int ithread_kill(ilong id)
 	#else
 	retval = -1;
 	#endif
+	CloseHandle((HANDLE)id);
 	#endif
 	return retval;
+}
+
+/* CloseHandle in windows, do nothing in linux/unix */
+int ithread_close(ilong id)
+{
+	#ifdef _WIN32
+	if (id != 0) {
+		CloseHandle((HANDLE)id);
+	}
+	#endif
+	return 0;
 }
 
 
