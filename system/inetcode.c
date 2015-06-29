@@ -2016,6 +2016,7 @@ int async_core_notify(CAsyncCore *core)
 				core->xfd[ASYNC_CORE_PIPE_FLAG] = 1;
 				hr = 0;
 			}
+			dummy = dummy;
 		}
 	}	else {
 		hr = 1;
