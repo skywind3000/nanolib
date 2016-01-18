@@ -5135,8 +5135,10 @@ int iposix_thread_cancel(iPosixThread *thread)
 
 	if (thread == NULL) return -1;
 	if (thread->target == NULL) return -2;
-	
+
 	IMUTEX_LOCK(&thread->lock);
+
+	thread->alive = 0;
 
 	if (thread->target == NULL) {
 		IMUTEX_UNLOCK(&thread->lock);
@@ -5145,6 +5147,7 @@ int iposix_thread_cancel(iPosixThread *thread)
 
 	if (thread->state == IPOSIX_THREAD_STATE_STOP) {
 		IMUTEX_UNLOCK(&thread->lock);
+		thread->alive = 0;
 		return 0;
 	}
 
@@ -5174,6 +5177,7 @@ int iposix_thread_cancel(iPosixThread *thread)
 			thread->attr_inited = 0;
 		}
 	#endif
+		thread->alive = 0;
 	}
 
 	thread->state = IPOSIX_THREAD_STATE_STOP;
@@ -5269,6 +5273,7 @@ int iposix_thread_affinity(iPosixThread *thread, unsigned int cpumask)
 	#elif defined(__CYGWIN__) || defined(__AVM3__)
 		retval = -3;
 	#elif defined(__linux__) && (!defined(__ANDROID__))
+		#if 0
 		cpu_set_t mask;
 		int i;
 		CPU_ZERO(&mask);
@@ -5283,6 +5288,9 @@ int iposix_thread_affinity(iPosixThread *thread, unsigned int cpumask)
 		retval = sched_setaffinity(thread->ptid, sizeof(mask), &mask);
 		#endif
 		if (retval != 0) retval = -2;
+		#else
+		retval = -3;
+		#endif
 	#else
 		retval = -4;
 	#endif
