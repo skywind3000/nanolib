@@ -1,6 +1,6 @@
 //=====================================================================
 //
-// itoolbox.c - ¹¤¾ßº¯Êý´ó¼¯ºÏ
+// itoolbox.c - å·¥å…·å‡½æ•°å¤§é›†åˆ
 //
 // NOTE:
 // for more information, please see the readme file.
@@ -12,11 +12,11 @@
 
 
 //=====================================================================
-// ¹¤¾ßº¯Êý
+// å·¥å…·å‡½æ•°
 //=====================================================================
 
-// ÉèÖÃÑÕÉ«£ºµÍ4Î»ÊÇÎÄ×ÖÑÕÉ«£¬¸ß4Î»ÊÇ±³¾°ÑÕÉ«
-// ¾ßÌå±àÂë¿ÉÒÔËÑË÷ ansi color»òÕß 
+// è®¾ç½®é¢œè‰²ï¼šä½Ž4ä½æ˜¯æ–‡å­—é¢œè‰²ï¼Œé«˜4ä½æ˜¯èƒŒæ™¯é¢œè‰²
+// å…·ä½“ç¼–ç å¯ä»¥æœç´¢ ansi coloræˆ–è€… 
 // http://en.wikipedia.org/wiki/ANSI_escape_code
 void console_set_color(int color)
 {
@@ -40,7 +40,7 @@ void console_set_color(int color)
 	#endif
 }
 
-// ÉèÖÃ¹â±êÎ»ÖÃ×óÉÏ½ÇÊÇ£¬ÐÐÓëÁÐ¶¼ÊÇ´Ó1¿ªÊ¼¼ÆÊýµÄ
+// è®¾ç½®å…‰æ ‡ä½ç½®å·¦ä¸Šè§’æ˜¯ï¼Œè¡Œä¸Žåˆ—éƒ½æ˜¯ä»Ž1å¼€å§‹è®¡æ•°çš„
 void console_cursor(int row, int col)
 {
 	#ifdef _WIN32
@@ -53,7 +53,7 @@ void console_cursor(int row, int col)
 	#endif
 }
 
-// »Ö¸´ÆÁÄ»ÑÕÉ«
+// æ¢å¤å±å¹•é¢œè‰²
 void console_reset(void)
 {
 	#ifdef _WIN32
@@ -63,7 +63,7 @@ void console_reset(void)
 	#endif
 }
 
-// ÇåÆÁ
+// æ¸…å±
 void console_clear(int color)
 {
 	#ifdef _WIN32
@@ -221,7 +221,7 @@ int icsv_reader_read(iCsvReader *reader)
 		reader->strings = NULL;
 	}
 	reader->count = 0;
-	if (reader->source) {	// Ê¹ÓÃÎÄ±¾Ä£Ê½
+	if (reader->source) {	// ä½¿ç”¨æ–‡æœ¬æ¨¡å¼
 		ivalue_t *str;
 		if (reader->line >= reader->source->count) {
 			istring_list_delete(reader->source);

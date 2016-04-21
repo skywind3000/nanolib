@@ -408,7 +408,7 @@ int ithread_close(ilong id)
 /*===================================================================*/
 
 /* get mutex by pointer */
-static inline IMUTEX_TYPE* internal_mutex_ptr(const void *ptr)
+static IMUTEX_TYPE* internal_mutex_ptr(const void *ptr)
 {
 	size_t linear = (size_t)ptr;
 	size_t h1 = (linear >> 24) & INTERNAL_MUTEX_MASK;
@@ -1676,8 +1676,8 @@ struct IPOLL_DRIVER
 /* current poll device */
 struct IPOLL_DRIVER IPOLLDRV;	
 
-#define PSTRUCT void					/* 定义基本结构体 */
-#define PDESC(pd) ((PSTRUCT*)(pd))		/* 定义结构体转换 */
+#define PSTRUCT void					/* basic struct */
+#define PDESC(pd) ((PSTRUCT*)(pd))		/* type conversion */
 
 /* poll file descriptor */
 struct IPOLLFD	

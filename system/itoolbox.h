@@ -1,6 +1,6 @@
 //=====================================================================
 //
-// itoolbox.h - ¹¤¾ßº¯Êı´ó¼¯ºÏ
+// itoolbox.h - å·¥å…·å‡½æ•°å¤§é›†åˆ
 //
 // NOTE:
 // for more information, please see the readme file.
@@ -20,10 +20,10 @@ extern "C" {
 #endif
 
 //=====================================================================
-// ¿ØÖÆÌ¨¹¤¾ß¼¯
+// æ§åˆ¶å°å·¥å…·é›†
 //=====================================================================
 
-// Ç°¾°ÑÕÉ«¶¨Òå
+// å‰æ™¯é¢œè‰²å®šä¹‰
 #define CTEXT_BLACK			0
 #define CTEXT_RED			1
 #define CTEXT_GREEN			2
@@ -41,7 +41,7 @@ extern "C" {
 #define CTEXT_BOLD_CYAN		14
 #define CTEXT_BOLD_WHITE	15
 
-// ±³¾°ÑÕÉ«¶¨Òå
+// èƒŒæ™¯é¢œè‰²å®šä¹‰
 #define CBG_BLACK			0
 #define CBG_RED				(1 << 4)
 #define CBG_GREEN			(2 << 4)
@@ -52,19 +52,19 @@ extern "C" {
 #define CBG_WHITE			(7 << 4)
 
 
-// ÉèÖÃÑÕÉ«£ºµÍ4Î»ÊÇÎÄ×ÖÑÕÉ«£¬¸ß4Î»ÊÇ±³¾°ÑÕÉ«
-// ¾ßÌå±àÂë¿ÉÒÔËÑË÷ ansi color»òÕß 
+// è®¾ç½®é¢œè‰²ï¼šä½4ä½æ˜¯æ–‡å­—é¢œè‰²ï¼Œé«˜4ä½æ˜¯èƒŒæ™¯é¢œè‰²
+// å…·ä½“ç¼–ç å¯ä»¥æœç´¢ ansi coloræˆ–è€… 
 // http://en.wikipedia.org/wiki/ANSI_escape_code
 void console_set_color(int color);
 
 
-// ÉèÖÃ¹â±êÎ»ÖÃ×óÉÏ½ÇÊÇ£¬ĞĞÓëÁĞ¶¼ÊÇ´Ó1¿ªÊ¼¼ÆÊıµÄ
+// è®¾ç½®å…‰æ ‡ä½ç½®å·¦ä¸Šè§’æ˜¯ï¼Œè¡Œä¸åˆ—éƒ½æ˜¯ä»1å¼€å§‹è®¡æ•°çš„
 void console_cursor(int row, int col);
 
-// »Ö¸´ÆÁÄ»ÑÕÉ«
+// æ¢å¤å±å¹•é¢œè‰²
 void console_reset(void);
 
-// ÇåÆÁ
+// æ¸…å±
 void console_clear(int color);
 
 
