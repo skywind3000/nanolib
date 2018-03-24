@@ -87,11 +87,11 @@ struct ISEGOUT *itcp_new_segout(itcpcb *tcp)
 
 	size = _imax(sizeof(struct ISEGOUT), sizeof(struct ISEGIN));
 
-	if (iqueue_is_empty(&tcp->sfree)) {
+	if (ilist_is_empty(&tcp->sfree)) {
 		segout = (struct ISEGOUT*)itcp_malloc(size + sizeof(long));
 	}	else {
-		segout = iqueue_entry(tcp->sfree.next, ISEGOUT, head);
-		iqueue_del(&segout->head);
+		segout = ilist_entry(tcp->sfree.next, ISEGOUT, head);
+		ilist_del(&segout->head);
 		tcp->free_cnt--;
 	}
 
@@ -118,7 +118,7 @@ void itcp_del_segout(itcpcb *tcp, struct ISEGOUT *seg)
 	if (tcp->free_cnt >= tcp->free_max) {
 		itcp_free(seg);
 	}	else {
-		iqueue_add(&seg->head, &tcp->sfree);
+		ilist_add(&seg->head, &tcp->sfree);
 		tcp->free_cnt++;
 	}
 }
@@ -215,10 +215,10 @@ itcpcb *itcp_create(IUINT32 conv, const void *user)
 	tcp->logmask = 0;
 	tcp->id = 0;
 
-	iqueue_init(&tcp->slist);
-	iqueue_init(&tcp->rlist);
+	ilist_init(&tcp->slist);
+	ilist_init(&tcp->rlist);
 
-	iqueue_init(&tcp->sfree);
+	ilist_init(&tcp->sfree);
 	tcp->free_cnt = 0;
 	tcp->free_max = 200;
 
@@ -251,21 +251,21 @@ void itcp_release(itcpcb *tcp)
 {
 	ASSERT(tcp);
 
-	while (!iqueue_is_empty(&tcp->slist)) {
-		ISEGOUT *segout = iqueue_entry(tcp->slist.next, ISEGOUT, head);
-		iqueue_del(&segout->head);
+	while (!ilist_is_empty(&tcp->slist)) {
+		ISEGOUT *segout = ilist_entry(tcp->slist.next, ISEGOUT, head);
+		ilist_del(&segout->head);
 		itcp_del_segout(tcp, segout);
 	}
 
-	while (!iqueue_is_empty(&tcp->rlist)) {
-		ISEGIN *segin = iqueue_entry(tcp->rlist.next, ISEGIN, head);
-		iqueue_del(&segin->head);
+	while (!ilist_is_empty(&tcp->rlist)) {
+		ISEGIN *segin = ilist_entry(tcp->rlist.next, ISEGIN, head);
+		ilist_del(&segin->head);
 		itcp_del_segin(tcp, segin);
 	}
 
-	while (!iqueue_is_empty(&tcp->sfree)) {
-		ISEGOUT *segdata = iqueue_entry(tcp->sfree.next, ISEGOUT, head);
-		iqueue_del(&segdata->head);
+	while (!ilist_is_empty(&tcp->sfree)) {
+		ISEGOUT *segdata = ilist_entry(tcp->sfree.next, ISEGOUT, head);
+		ilist_del(&segdata->head);
 		itcp_free(segdata);
 	}
 
@@ -483,8 +483,8 @@ static long itcp_send_queue(itcpcb *tcp, const char *data, int len, int ctl)
 		ASSERT(!ctl);
 		len = tcp->buf_size - tcp->slen;
 	}	
-	if (!iqueue_is_empty(&tcp->slist)) {
-		node = iqueue_entry(tcp->slist.prev, ISEGOUT, head);
+	if (!ilist_is_empty(&tcp->slist)) {
+		node = ilist_entry(tcp->slist.prev, ISEGOUT, head);
 		if (node->bctl == ctl && node->xmit == 0) {
 			reuse = 1;
 			node->len += len;
@@ -493,12 +493,12 @@ static long itcp_send_queue(itcpcb *tcp, const char *data, int len, int ctl)
 	if (reuse == 0) {
 		node = itcp_new_segout(tcp);
 		ASSERT(node);
-		iqueue_init(&node->head);
+		ilist_init(&node->head);
 		node->seq = tcp->snd_una + tcp->slen;
 		node->len = len;
 		node->bctl = (unsigned short)ctl;
 		node->xmit = 0;
-		iqueue_add_tail(&node->head, &tcp->slist);
+		ilist_add_tail(&node->head, &tcp->slist);
 	}
 	if (len > 0) {
 		#ifdef ITCP_CIRCLE
@@ -607,7 +607,7 @@ static int itcp_send_seg(itcpcb *tcp, ISEGOUT *seg)
 		subseg->bctl = seg->bctl;
 		subseg->xmit = seg->xmit;
 		seg->len = ntransmit;
-		iqueue_add(&subseg->head, &seg->head);
+		ilist_add(&subseg->head, &seg->head);
 	}
 
 	if (seg->xmit == 0) {
@@ -643,7 +643,7 @@ static void itcp_send_newdata(itcpcb *tcp, int sflag)
 
 	while (1) {
 		IUINT32 cwnd, nwin, ninflight, nuseable, navailiable;
-		iqueue_head *node;
+		ilist_head *node;
 		ISEGOUT *seg;
 
 		cwnd = tcp->cwnd;
@@ -692,7 +692,7 @@ static void itcp_send_newdata(itcpcb *tcp, int sflag)
 		seg = NULL;
 		for (node = tcp->slist.next; ; ) {
 			ASSERT(node != &tcp->slist);
-			seg = iqueue_entry(node, ISEGOUT, head);
+			seg = ilist_entry(node, ISEGOUT, head);
 			if (seg->xmit == 0) break;
 			node = node->next;
 		}
@@ -704,7 +704,7 @@ static void itcp_send_newdata(itcpcb *tcp, int sflag)
 			subseg->bctl = seg->bctl;
 			subseg->xmit = 0;
 			seg->len = navailiable;
-			iqueue_add(&subseg->head, node);
+			ilist_add(&subseg->head, node);
 		}
 
 		retval = itcp_send_seg(tcp, seg);
@@ -752,12 +752,12 @@ static void itcp_adjust_mtu(itcpcb *tcp)
 //---------------------------------------------------------------------
 static void itcp_check_slist(itcpcb *tcp)
 {
-	iqueue_head *it;
+	ilist_head *it;
 	IUINT32 seq, len;
 	seq = tcp->snd_una;
 	len = 0;
 	for (it = tcp->slist.next; it != &tcp->slist; it = it->next) {
-		ISEGOUT *seg = iqueue_entry(it, ISEGOUT, head);
+		ISEGOUT *seg = ilist_entry(it, ISEGOUT, head);
 		if (seg->seq != seq) printf("ERROR: seq ");
 		//printf("[%d:%d] ", seg->seq, seg->seq + seg->len);
 		seq += seg->len;
@@ -855,8 +855,8 @@ static int itcp_ack_update(itcpcb *tcp, ISEGMENT *seg, int bconnect)
 		#endif
 
 		for (nfree = nacked; nfree > 0; ) {
-			ASSERT(!iqueue_is_empty(&tcp->slist));
-			segout = iqueue_entry(tcp->slist.next, ISEGOUT, head);
+			ASSERT(!ilist_is_empty(&tcp->slist));
+			segout = ilist_entry(tcp->slist.next, ISEGOUT, head);
 			if (nfree < segout->len) {
 				segout->len -= nfree;
 				segout->seq += nfree;		// important fixed
@@ -866,7 +866,7 @@ static int itcp_ack_update(itcpcb *tcp, ISEGMENT *seg, int bconnect)
 					tcp->largest = segout->len;
 				}
 				nfree -= segout->len;
-				iqueue_del(&segout->head);
+				ilist_del(&segout->head);
 				itcp_del_segout(tcp, segout);
 			}
 		}
@@ -882,12 +882,12 @@ static int itcp_ack_update(itcpcb *tcp, ISEGMENT *seg, int bconnect)
 				}
 			}	else {
 				int vv;
-				ASSERT(!iqueue_is_empty(&tcp->slist));
+				ASSERT(!ilist_is_empty(&tcp->slist));
 				if (tcp->logmask & ILOG_WINDOW) {
 					itcp_log(tcp, ILOG_WINDOW, "[%d] recovery retrans",
 						tcp->id);
 				}
-				segout = iqueue_entry(tcp->slist.next, ISEGOUT, head);
+				segout = ilist_entry(tcp->slist.next, ISEGOUT, head);
 				if (itcp_send_seg(tcp, segout) == ITR_FAILED) {
 					itcp_closedown(tcp, IECONNABORTED);
 					return -5;
@@ -928,8 +928,8 @@ static int itcp_ack_update(itcpcb *tcp, ISEGMENT *seg, int bconnect)
 		else if (tcp->snd_una != tcp->snd_nxt) {
 			tcp->dup_acks += 1;
 			if (tcp->dup_acks == 3) {
-				if (!iqueue_is_empty(&tcp->slist)) {
-					segout = iqueue_entry(tcp->slist.next, ISEGOUT, head);
+				if (!ilist_is_empty(&tcp->slist)) {
+					segout = ilist_entry(tcp->slist.next, ISEGOUT, head);
 					if (itcp_send_seg(tcp, segout) == ITR_FAILED) {
 						itcp_closedown(tcp, IECONNABORTED);
 						return -6;
@@ -964,18 +964,18 @@ void itcp_slist(itcpcb *tcp)
 {
 	ISEGOUT *seg;
 	int index = 0;
-	if (iqueue_is_empty(&tcp->slist)) return;
+	if (ilist_is_empty(&tcp->slist)) return;
 	itcp_log(tcp, ILOG_PACKET, "[%d] <slist total slen=%d>", 
 		tcp->id, tcp->slen);
-	if (iqueue_is_empty(&tcp->slist) == 0) {
-		seg = iqueue_entry(tcp->slist.next, ISEGOUT, head);
+	if (ilist_is_empty(&tcp->slist) == 0) {
+		seg = ilist_entry(tcp->slist.next, ISEGOUT, head);
 		for (; ; ) {
 			itcp_log(tcp, ILOG_PACKET, 
 			"[%d] SEGOUT %d: <seq=%d:%d, len=%d, xmit=%d, bctl=%d>", 
 			tcp->id, index, seg->seq, seg->seq + seg->len, seg->len, 
 			seg->xmit, seg->bctl);
 			if (seg->head.next == &tcp->slist) break;
-			seg = iqueue_entry(seg->head.next, ISEGOUT, head);
+			seg = ilist_entry(seg->head.next, ISEGOUT, head);
 			index ++;
 		}
 	}
@@ -1125,8 +1125,8 @@ int itcp_process(itcpcb *tcp, ISEGMENT *seg)
 				tcp->rcv_wnd -= seg->len;
 				newdata = 1;
 
-				while (!iqueue_is_empty(&tcp->rlist)) {
-					segin = iqueue_entry(tcp->rlist.next, ISEGIN, head);
+				while (!ilist_is_empty(&tcp->rlist)) {
+					segin = ilist_entry(tcp->rlist.next, ISEGIN, head);
 					if (segin->seq > tcp->rcv_nxt) break;
 					if (segin->seq + segin->len > tcp->rcv_nxt) {
 						sflag = ISFLAG_IMM_ACK;
@@ -1135,7 +1135,7 @@ int itcp_process(itcpcb *tcp, ISEGMENT *seg)
 						tcp->rcv_nxt += adjust;
 						tcp->rcv_wnd -= adjust;
 					}
-					iqueue_del(&segin->head);
+					ilist_del(&segin->head);
 					itcp_del_segin(tcp, segin);
 				}
 				if (((int)tcp->rcv_wnd) < 0) {
@@ -1145,17 +1145,17 @@ int itcp_process(itcpcb *tcp, ISEGMENT *seg)
 				}
 			}	else {
 				ISEGIN *rseg;
-				iqueue_head *it;
+				ilist_head *it;
 				rseg = itcp_new_segin(tcp);
 				ASSERT(rseg);
 				rseg->seq = seg->seq;
 				rseg->len = seg->len;
 				for (it = tcp->rlist.next; it != &tcp->rlist; ) {
-					segin = iqueue_entry(it, ISEGIN, head);
+					segin = ilist_entry(it, ISEGIN, head);
 					if (segin->seq >= rseg->seq) break;
 					it = it->next;
 				}
-				iqueue_add_tail(&rseg->head, it);
+				ilist_add_tail(&rseg->head, it);
 			}
 		}
 	}
@@ -1360,7 +1360,7 @@ void itcp_update(itcpcb *tcp, IUINT32 millisec)
 
 	// retransmit segment
 	if (tcp->rto_base && itimediff(tcp->rto_base + tcp->rx_rto, now) <= 0) {
-		if (iqueue_is_empty(&tcp->slist)) {
+		if (ilist_is_empty(&tcp->slist)) {
 			assert(0);
 		}	else {
 			IUINT32 rto_limit;
@@ -1368,7 +1368,7 @@ void itcp_update(itcpcb *tcp, IUINT32 millisec)
 			int newrto;
 			int result;
 	
-			seg = iqueue_entry(tcp->slist.next, ISEGOUT, head);
+			seg = ilist_entry(tcp->slist.next, ISEGOUT, head);
 			//itcp_log_segout(tcp, seg);
 			//printf("retrans: rto=%d\n", tcp->rx_rto);
 			result = itcp_send_seg(tcp, seg);

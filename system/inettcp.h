@@ -89,7 +89,7 @@ struct ISEGMENT
 //---------------------------------------------------------------------
 struct ISEGOUT
 {
-	iqueue_head head;
+	ilist_head head;
 	IUINT32 seq;
 	IUINT32 len;
 	IUINT16 xmit;
@@ -101,7 +101,7 @@ struct ISEGOUT
 //---------------------------------------------------------------------
 struct ISEGIN
 {
-	iqueue_head head;
+	ilist_head head;
 	IUINT32 seq, len;
 };
 
@@ -122,12 +122,12 @@ struct ITCPCB
 	IUINT32 buf_size;
 
 	IUINT32 snd_una, snd_nxt, snd_wnd, last_send, slen;
-	iqueue_head slist;
+	ilist_head slist;
 	iring_t scache;
 	char *sbuf;
 
 	IUINT32 rcv_nxt, rcv_wnd, last_recv, rlen;
-	iqueue_head rlist;
+	ilist_head rlist;
 	iring_t rcache;
 	char *rbuf;
 
@@ -137,7 +137,7 @@ struct ITCPCB
 	int be_outgoing;
 	IUINT32 ts_recent, ts_lastack, ts_acklocal;
 
-	iqueue_head sfree;
+	ilist_head sfree;
 	int free_cnt;
 	int free_max;
 	char *buffer;

@@ -20,7 +20,7 @@
 /*====================================================================*/
 
 //---------------------------------------------------------------------
-// µ¥ÏòÁ´Â·£º³õÊ¼»¯
+// å•å‘é“¾è·¯ï¼šåˆå§‹åŒ–
 //---------------------------------------------------------------------
 void isim_transfer_init(iSimTransfer *trans, long rtt, long lost, long amb, 
 		long limit, int mode)
@@ -36,29 +36,29 @@ void isim_transfer_init(iSimTransfer *trans, long rtt, long lost, long amb,
 	trans->cnt_send = 0;
 	trans->cnt_drop = 0;
 	trans->mode = mode;
-	iqueue_init(&trans->head);
+	ilist_init(&trans->head);
 }
 
 //---------------------------------------------------------------------
-// µ¥ÏòÁ´Â·£ºÏú»Ù
+// å•å‘é“¾è·¯ï¼šé”€æ¯
 //---------------------------------------------------------------------
 void isim_transfer_destroy(iSimTransfer *trans)
 {
 	assert(trans);
-	while (!iqueue_is_empty(&trans->head)) {
-		struct IQUEUEHEAD *head = trans->head.next;
-		iSimPacket *packet = iqueue_entry(head, iSimPacket, head);
-		iqueue_del(head);
+	while (!ilist_is_empty(&trans->head)) {
+		struct ILISTHEAD *head = trans->head.next;
+		iSimPacket *packet = ilist_entry(head, iSimPacket, head);
+		ilist_del(head);
 		free(packet);
 	}
 	trans->size = 0;
 	trans->cnt_send = 0;
 	trans->cnt_drop = 0;
-	iqueue_init(&trans->head);
+	ilist_init(&trans->head);
 }
 
 //---------------------------------------------------------------------
-// µ¥ÏòÁ´Â·£ºÉèÖÃÊ±¼ä
+// å•å‘é“¾è·¯ï¼šè®¾ç½®æ—¶é—´
 //---------------------------------------------------------------------
 void isim_transfer_settime(iSimTransfer *trans, unsigned long time)
 {
@@ -67,7 +67,7 @@ void isim_transfer_settime(iSimTransfer *trans, unsigned long time)
 }
 
 //---------------------------------------------------------------------
-// µ¥ÏòÁ´Â·£ºËæ»úÊı
+// å•å‘é“¾è·¯ï¼šéšæœºæ•°
 //---------------------------------------------------------------------
 long isim_transfer_random(iSimTransfer *trans, long range)
 {
@@ -85,24 +85,24 @@ long isim_transfer_random(iSimTransfer *trans, long range)
 }
 
 //---------------------------------------------------------------------
-// µ¥ÏòÁ´Â·£º·¢ËÍÊı¾İ
+// å•å‘é“¾è·¯ï¼šå‘é€æ•°æ®
 //---------------------------------------------------------------------
 long isim_transfer_send(iSimTransfer *trans, const void *data, long size)
 {
 	iSimPacket *packet;
-	iqueue_head *p;
+	ilist_head *p;
 	long feature;
 	long wave;
 
 	trans->cnt_send++;
 
-	// ÅĞ¶ÏÊÇ·ñ³¬¹ıÏŞÖÆ
+	// åˆ¤æ–­æ˜¯å¦è¶…è¿‡é™åˆ¶
 	if (trans->size >= trans->limit) {
 		trans->cnt_drop++;
 		return -1;
 	}
 
-	// ÅĞ¶ÏÊÇ·ñ¶ª°ü
+	// åˆ¤æ–­æ˜¯å¦ä¸¢åŒ…
 	if (trans->lost > 0) {
 		if (isim_transfer_random(trans, 100) < trans->lost) {
 			trans->cnt_drop++;
@@ -110,7 +110,7 @@ long isim_transfer_send(iSimTransfer *trans, const void *data, long size)
 		}
 	}
 
-	// ·ÖÅäĞÂÊı¾İ°ü
+	// åˆ†é…æ–°æ•°æ®åŒ…
 	packet = (iSimPacket*)malloc(sizeof(iSimPacket) + size);
 	assert(packet);
 
@@ -119,7 +119,7 @@ long isim_transfer_send(iSimTransfer *trans, const void *data, long size)
 
 	memcpy(packet->data, data, size);
 
-	// ¼ÆËãµ½´ïÊ±¼ä
+	// è®¡ç®—åˆ°è¾¾æ—¶é—´
 	wave = (trans->rtt * trans->amb) / 100;
 	wave = (wave * (isim_transfer_random(trans, 200) - 100)) / 100;
 	wave = wave + trans->rtt;
@@ -129,57 +129,57 @@ long isim_transfer_send(iSimTransfer *trans, const void *data, long size)
 
 	packet->timestamp = feature;
 
-	// °´µ½´ïÊ±¼äÏÈºó²åÈëÊ±¼äÁ´±í
+	// æŒ‰åˆ°è¾¾æ—¶é—´å…ˆåæ’å…¥æ—¶é—´é“¾è¡¨
 	for (p = trans->head.prev; p != &trans->head; p = p->prev) {
-		iSimPacket *node = iqueue_entry(p, iSimPacket, head);
+		iSimPacket *node = ilist_entry(p, iSimPacket, head);
 		if (node->timestamp < packet->timestamp) break;
 	}
 	
-	// Èç¹ûÊÇË³ĞòÄ£Ê½
+	// å¦‚æœæ˜¯é¡ºåºæ¨¡å¼
 	if (trans->mode != 0) p = trans->head.prev;
 
-	iqueue_add(&packet->head, p);
+	ilist_add(&packet->head, p);
 	trans->size++;
 
 	return 0;
 }
 
 //---------------------------------------------------------------------
-// µ¥ÏòÁ´Â·£º½ÓÊÕÊı¾İ
+// å•å‘é“¾è·¯ï¼šæ¥æ”¶æ•°æ®
 //---------------------------------------------------------------------
 long isim_transfer_recv(iSimTransfer *trans, void *data, long maxsize)
 {
 	iSimPacket *packet;
-	iqueue_head *p;
+	ilist_head *p;
 	long size = 0;
 
 	assert(trans);
 
-	// Ã»ÓĞÊı¾İ°ü
-	if (iqueue_is_empty(&trans->head)) {
+	// æ²¡æœ‰æ•°æ®åŒ…
+	if (ilist_is_empty(&trans->head)) {
 		return -1;
 	}
 
 	p = trans->head.next;
-	packet = iqueue_entry(p, iSimPacket, head);
+	packet = ilist_entry(p, iSimPacket, head);
 
-	// »¹Îªµ½´ï½ÓÊÕÊ±¼ä
+	// è¿˜ä¸ºåˆ°è¾¾æ¥æ”¶æ—¶é—´
 	if (trans->current < packet->timestamp) {
 		return -2;
 	}
 
-	// ÒÆ³ı¶ÓÁĞ
-	iqueue_del(p);
+	// ç§»é™¤é˜Ÿåˆ—
+	ilist_del(p);
 	trans->size--;
 
-	// Êı¾İ¿½±´
+	// æ•°æ®æ‹·è´
 	if (data) {
 		size = packet->size;
 		if (size > maxsize) size = maxsize;
 		memcpy(data, packet->data, size);
 	}
 
-	// ÊÍ·ÅÄÚ´æ
+	// é‡Šæ”¾å†…å­˜
 	free(packet);
 
 	return size;
@@ -188,17 +188,17 @@ long isim_transfer_recv(iSimTransfer *trans, void *data, long maxsize)
 
 //---------------------------------------------------------------------
 // isim_init:
-// ³õÊ¼»¯ÍøÂçÄ£ÄâÆ÷
-// rtt   - Íù·µÊ±¼äÆ½¾ùÊı
-// lost  - ¶ª°üÂÊ°Ù·Ö±È (0 - 100)
-// amb   - Ê±¼äÕñ·ù°Ù·Ö±È (0 - 100)
-// limit - ×î¶à°ü»º´æÊıÁ¿
-// mode  - 0(ºó·¢°ü»áÏÈµ½) 1(ºó·¢°ü±ØÈ»ºóµ½´ï)
-// µ½´ïÊ±¼ä  = µ±Ç°Ê±¼ä + rtt * 0.5 + rtt * (amb * 0.01) * random(-0.5, 0.5)
-// ¹«Íø¼«ËÙ  = rtt( 60), lost( 5), amb(30), limit(1000)
-// ¹«Íø¿ìËÙ  = rtt(120), lost(10), amb(40), limit(1000)
-// ¹«ÍøÆÕÍ¨  = rtt(200), lost(10), amb(50), limit(1000)
-// ¹«ÍøÂıËÙ  = rtt(800), lost(20), amb(60), limit(1000)
+// åˆå§‹åŒ–ç½‘ç»œæ¨¡æ‹Ÿå™¨
+// rtt   - å¾€è¿”æ—¶é—´å¹³å‡æ•°
+// lost  - ä¸¢åŒ…ç‡ç™¾åˆ†æ¯” (0 - 100)
+// amb   - æ—¶é—´æŒ¯å¹…ç™¾åˆ†æ¯” (0 - 100)
+// limit - æœ€å¤šåŒ…ç¼“å­˜æ•°é‡
+// mode  - 0(åå‘åŒ…ä¼šå…ˆåˆ°) 1(åå‘åŒ…å¿…ç„¶ååˆ°è¾¾)
+// åˆ°è¾¾æ—¶é—´  = å½“å‰æ—¶é—´ + rtt * 0.5 + rtt * (amb * 0.01) * random(-0.5, 0.5)
+// å…¬ç½‘æé€Ÿ  = rtt( 60), lost( 5), amb(30), limit(1000)
+// å…¬ç½‘å¿«é€Ÿ  = rtt(120), lost(10), amb(40), limit(1000)
+// å…¬ç½‘æ™®é€š  = rtt(200), lost(10), amb(50), limit(1000)
+// å…¬ç½‘æ…¢é€Ÿ  = rtt(800), lost(20), amb(60), limit(1000)
 //---------------------------------------------------------------------
 void isim_init(iSimNet *simnet, long rtt, long lost, long amb, long limit, int mode)
 {
@@ -212,7 +212,7 @@ void isim_init(iSimNet *simnet, long rtt, long lost, long amb, long limit, int m
 }
 
 //---------------------------------------------------------------------
-// É¾³ıÍøÂçÄ£ÄâÆ÷
+// åˆ é™¤ç½‘ç»œæ¨¡æ‹Ÿå™¨
 //---------------------------------------------------------------------
 void isim_destroy(iSimNet *simnet)
 {
@@ -230,7 +230,7 @@ void isim_destroy(iSimNet *simnet)
 }
 
 //---------------------------------------------------------------------
-// ÉèÖÃÊ±¼ä
+// è®¾ç½®æ—¶é—´
 //---------------------------------------------------------------------
 void isim_settime(iSimNet *simnet, unsigned long current)
 {
@@ -240,7 +240,7 @@ void isim_settime(iSimNet *simnet, unsigned long current)
 }
 
 //---------------------------------------------------------------------
-// ·¢ËÍÊı¾İ
+// å‘é€æ•°æ®
 //---------------------------------------------------------------------
 long isim_send(iSimPeer *peer, const void *data, long size)
 {
@@ -248,7 +248,7 @@ long isim_send(iSimPeer *peer, const void *data, long size)
 }
 
 //---------------------------------------------------------------------
-// ½ÓÊÕÊı¾İ
+// æ¥æ”¶æ•°æ®
 //---------------------------------------------------------------------
 long isim_recv(iSimPeer *peer, void *data, long maxsize)
 {
@@ -256,7 +256,7 @@ long isim_recv(iSimPeer *peer, void *data, long maxsize)
 }
 
 //---------------------------------------------------------------------
-// È¡µÃ¶Ëµã£ºpeerno = 0(¶Ëµã1), 1(¶Ëµã2)
+// å–å¾—ç«¯ç‚¹ï¼špeerno = 0(ç«¯ç‚¹1), 1(ç«¯ç‚¹2)
 //---------------------------------------------------------------------
 iSimPeer *isim_peer(iSimNet *simnet, int peerno)
 {
@@ -267,7 +267,7 @@ iSimPeer *isim_peer(iSimNet *simnet, int peerno)
 }
 
 //---------------------------------------------------------------------
-// ÉèÖÃËæ»úÊıÖÖ×Ó
+// è®¾ç½®éšæœºæ•°ç§å­
 //---------------------------------------------------------------------
 void isim_seed(iSimNet *simnet, unsigned long seed1, unsigned long seed2)
 {

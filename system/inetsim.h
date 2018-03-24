@@ -14,24 +14,24 @@
 /*====================================================================*/
 /* QUEUE DEFINITION                                                   */
 /*====================================================================*/
-#ifndef __IQUEUE_DEF__
-#define __IQUEUE_DEF__
+#ifndef __ILIST_DEF__
+#define __ILIST_DEF__
 
-struct IQUEUEHEAD {
-	struct IQUEUEHEAD *next, *prev;
+struct ILISTHEAD {
+	struct ILISTHEAD *next, *prev;
 };
 
-typedef struct IQUEUEHEAD iqueue_head;
+typedef struct ILISTHEAD ilist_head;
 
 
 /*--------------------------------------------------------------------*/
 /* queue init                                                         */
 /*--------------------------------------------------------------------*/
-#define IQUEUE_HEAD_INIT(name) { &(name), &(name) }
-#define IQUEUE_HEAD(name) \
-	struct IQUEUEHEAD name = IQUEUE_HEAD_INIT(name)
+#define ILIST_HEAD_INIT(name) { &(name), &(name) }
+#define ILIST_HEAD(name) \
+	struct ILISTHEAD name = ILIST_HEAD_INIT(name)
 
-#define IQUEUE_INIT(ptr) ( \
+#define ILIST_INIT(ptr) ( \
 	(ptr)->next = (ptr), (ptr)->prev = (ptr))
 
 #define IOFFSETOF(TYPE, MEMBER) ((unsigned long) &((TYPE *)0)->MEMBER)
@@ -39,47 +39,47 @@ typedef struct IQUEUEHEAD iqueue_head;
 #define ICONTAINEROF(ptr, type, member) ( \
 		(type*)( ((char*)((type*)ptr)) - IOFFSETOF(type, member)) )
 
-#define IQUEUE_ENTRY(ptr, type, member) ICONTAINEROF(ptr, type, member)
+#define ILIST_ENTRY(ptr, type, member) ICONTAINEROF(ptr, type, member)
 
 
 /*--------------------------------------------------------------------*/
 /* queue operation                                                    */
 /*--------------------------------------------------------------------*/
-#define IQUEUE_ADD(node, head) ( \
+#define ILIST_ADD(node, head) ( \
 	(node)->prev = (head), (node)->next = (head)->next, \
 	(head)->next->prev = (node), (head)->next = (node))
 
-#define IQUEUE_ADD_TAIL(node, head) ( \
+#define ILIST_ADD_TAIL(node, head) ( \
 	(node)->prev = (head)->prev, (node)->next = (head), \
 	(head)->prev->next = (node), (head)->prev = (node))
 
-#define IQUEUE_DEL_BETWEEN(p, n) ((n)->prev = (p), (p)->next = (n))
+#define ILIST_DEL_BETWEEN(p, n) ((n)->prev = (p), (p)->next = (n))
 
-#define IQUEUE_DEL(entry) (\
+#define ILIST_DEL(entry) (\
 	(entry)->next->prev = (entry)->prev, \
 	(entry)->prev->next = (entry)->next, \
 	(entry)->next = 0, (entry)->prev = 0)
 
-#define IQUEUE_DEL_INIT(entry) do { \
-	IQUEUE_DEL(entry); IQUEUE_INIT(entry); } while (0);
+#define ILIST_DEL_INIT(entry) do { \
+	ILIST_DEL(entry); ILIST_INIT(entry); } while (0);
 
-#define IQUEUE_IS_EMPTY(entry) ((entry) == (entry)->next)
+#define ILIST_IS_EMPTY(entry) ((entry) == (entry)->next)
 
-#define iqueue_init		IQUEUE_INIT
-#define iqueue_entry	IQUEUE_ENTRY
-#define iqueue_add		IQUEUE_ADD
-#define iqueue_add_tail	IQUEUE_ADD_TAIL
-#define iqueue_del		IQUEUE_DEL
-#define iqueue_del_init	IQUEUE_DEL_INIT
-#define iqueue_is_empty IQUEUE_IS_EMPTY
+#define ilist_init		ILIST_INIT
+#define ilist_entry	ILIST_ENTRY
+#define ilist_add		ILIST_ADD
+#define ilist_add_tail	ILIST_ADD_TAIL
+#define ilist_del		ILIST_DEL
+#define ilist_del_init	ILIST_DEL_INIT
+#define ilist_is_empty ILIST_IS_EMPTY
 
-#define IQUEUE_FOREACH(iterator, head, TYPE, MEMBER) \
-	for ((iterator) = iqueue_entry((head)->next, TYPE, MEMBER); \
+#define ILIST_FOREACH(iterator, head, TYPE, MEMBER) \
+	for ((iterator) = ilist_entry((head)->next, TYPE, MEMBER); \
 		&((iterator)->MEMBER) != (head); \
-		(iterator) = iqueue_entry((iterator)->MEMBER.next, TYPE, MEMBER))
+		(iterator) = ilist_entry((iterator)->MEMBER.next, TYPE, MEMBER))
 
-#define iqueue_foreach(iterator, head, TYPE, MEMBER) \
-	IQUEUE_FOREACH(iterator, head, TYPE, MEMBER)
+#define ilist_foreach(iterator, head, TYPE, MEMBER) \
+	ILIST_FOREACH(iterator, head, TYPE, MEMBER)
 
 
 #ifdef _MSC_VER
@@ -96,51 +96,51 @@ typedef struct IQUEUEHEAD iqueue_head;
 /* GLOBAL DEFINITION                                                  */
 /*====================================================================*/
 
-// Ä£ÄâÊı¾İ°ü
+// æ¨¡æ‹Ÿæ•°æ®åŒ…
 struct ISIMPACKET
 {
-	struct IQUEUEHEAD head;			// Á´±í½Úµã£º°´ÕÕÊ±¼äÅÅĞò
-	unsigned long timestamp;		// Ê±¼ä´Á£ºµ½´ïµÄÊ±¼ä
-	unsigned long size;				// ´óĞ¡
-	unsigned char *data;			// Êı¾İÖ¸Õë
+	struct ILISTHEAD head;			// é“¾è¡¨èŠ‚ç‚¹ï¼šæŒ‰ç…§æ—¶é—´æ’åº
+	unsigned long timestamp;		// æ—¶é—´æˆ³ï¼šåˆ°è¾¾çš„æ—¶é—´
+	unsigned long size;				// å¤§å°
+	unsigned char *data;			// æ•°æ®æŒ‡é’ˆ
 };
 
 typedef struct ISIMPACKET iSimPacket;
 
-// µ¥ÏòÁ´Â·
+// å•å‘é“¾è·¯
 struct ISIMTRANSFER
 {
-	struct IQUEUEHEAD head;			// Ê±¼äÅÅĞòÁ´±í
-	unsigned long current;			// µ±Ç°Ê±¼ä
-	unsigned long seed;				// Ëæ»úÖÖ×Ó
-	long size;						// °ü¸öÊı
-	long limit;						// ×î´ó°üÊı
-	long rtt;						// Æ½¾ùÍù·µÊ±¼ä(120, 200, ..)
-	long lost;						// ¶ª°üÂÊ°Ù·Ö±È(0-100)
-	long amb;						// ÑÓ³ÙÕñ·ù°Ù·Ö±È(0-100)
-	int mode;						// Ä£Ê½0(»áÇ°ºóµ½´ï)1(Ë³Ğòµ½´ï)
-	long cnt_send;					// ·¢ËÍÁË¶àÉÙ¸ö°ü
-	long cnt_drop;					// ¶ªÊ§ÁË¶àÉÙ¸ö°ü
+	struct ILISTHEAD head;			// æ—¶é—´æ’åºé“¾è¡¨
+	unsigned long current;			// å½“å‰æ—¶é—´
+	unsigned long seed;				// éšæœºç§å­
+	long size;						// åŒ…ä¸ªæ•°
+	long limit;						// æœ€å¤§åŒ…æ•°
+	long rtt;						// å¹³å‡å¾€è¿”æ—¶é—´(120, 200, ..)
+	long lost;						// ä¸¢åŒ…ç‡ç™¾åˆ†æ¯”(0-100)
+	long amb;						// å»¶è¿ŸæŒ¯å¹…ç™¾åˆ†æ¯”(0-100)
+	int mode;						// æ¨¡å¼0(ä¼šå‰ååˆ°è¾¾)1(é¡ºåºåˆ°è¾¾)
+	long cnt_send;					// å‘é€äº†å¤šå°‘ä¸ªåŒ…
+	long cnt_drop;					// ä¸¢å¤±äº†å¤šå°‘ä¸ªåŒ…
 };
 
 typedef struct ISIMTRANSFER iSimTransfer;
 
-// ÍøÂç¶Ëµã
+// ç½‘ç»œç«¯ç‚¹
 struct ISIMPEER
 {
-	iSimTransfer *t1;				// ·¢ËÍÁ´Â·
-	iSimTransfer *t2;				// ½ÓÊÕÁ´Â·
+	iSimTransfer *t1;				// å‘é€é“¾è·¯
+	iSimTransfer *t2;				// æ¥æ”¶é“¾è·¯
 };
 
 typedef struct ISIMPEER iSimPeer;
 
-// ÍøÂçÄ£ÄâÆ÷
+// ç½‘ç»œæ¨¡æ‹Ÿå™¨
 struct ISIMNET
 {
-	iSimTransfer t1;				// Á´Â·1
-	iSimTransfer t2;				// Á´Â·2
-	iSimPeer p1;					// ¶Ëµã1 (t1, t2)
-	iSimPeer p2;					// ¶Ëµã2 (t2, t1)
+	iSimTransfer t1;				// é“¾è·¯1
+	iSimTransfer t2;				// é“¾è·¯2
+	iSimPeer p1;					// ç«¯ç‚¹1 (t1, t2)
+	iSimPeer p2;					// ç«¯ç‚¹2 (t2, t1)
 };
 
 typedef struct ISIMNET iSimNet;
@@ -154,58 +154,58 @@ extern "C" {
 /* INTERFACE DEFINITION                                               */
 /*====================================================================*/
 
-// µ¥ÏòÁ´Â·£º³õÊ¼»¯
+// å•å‘é“¾è·¯ï¼šåˆå§‹åŒ–
 void isim_transfer_init(iSimTransfer *trans, long rtt, long lost, long amb, 
 		long limit, int mode);
 
-// µ¥ÏòÁ´Â·£ºÏú»Ù
+// å•å‘é“¾è·¯ï¼šé”€æ¯
 void isim_transfer_destroy(iSimTransfer *trans);
 
-// µ¥ÏòÁ´Â·£ºÉèÖÃÊ±¼ä
+// å•å‘é“¾è·¯ï¼šè®¾ç½®æ—¶é—´
 void isim_transfer_settime(iSimTransfer *trans, unsigned long time);
 
-// µ¥ÏòÁ´Â·£ºËæ»úÊı
+// å•å‘é“¾è·¯ï¼šéšæœºæ•°
 long isim_transfer_random(iSimTransfer *trans, long range);
 
-// µ¥ÏòÁ´Â·£º·¢ËÍÊı¾İ
+// å•å‘é“¾è·¯ï¼šå‘é€æ•°æ®
 long isim_transfer_send(iSimTransfer *trans, const void *data, long size);
 
-// µ¥ÏòÁ´Â·£º½ÓÊÕÊı¾İ
+// å•å‘é“¾è·¯ï¼šæ¥æ”¶æ•°æ®
 long isim_transfer_recv(iSimTransfer *trans, void *data, long maxsize);
 
 
 
 // isim_init:
-// ³õÊ¼»¯ÍøÂçÄ£ÄâÆ÷
-// rtt   - Íù·µÊ±¼äÆ½¾ùÊı
-// lost  - ¶ª°üÂÊ°Ù·Ö±È (0 - 100)
-// amb   - Ê±¼äÕñ·ù°Ù·Ö±È (0 - 100)
-// limit - ×î¶à°ü»º´æÊıÁ¿
-// mode  - 0(ºó·¢°ü»áÏÈµ½) 1(ºó·¢°ü±ØÈ»ºóµ½´ï)
-// µ½´ïÊ±¼ä  = µ±Ç°Ê±¼ä + rtt * 0.5 + rtt * (amb * 0.01) * random(-0.5, 0.5)
-// ¹«Íø¼«ËÙ  = rtt( 60), lost( 5), amb(30), limit(1000)
-// ¹«Íø¿ìËÙ  = rtt(120), lost(10), amb(40), limit(1000)
-// ¹«ÍøÆÕÍ¨  = rtt(200), lost(10), amb(50), limit(1000)
-// ¹«ÍøÂıËÙ  = rtt(800), lost(20), amb(60), limit(1000)
+// åˆå§‹åŒ–ç½‘ç»œæ¨¡æ‹Ÿå™¨
+// rtt   - å¾€è¿”æ—¶é—´å¹³å‡æ•°
+// lost  - ä¸¢åŒ…ç‡ç™¾åˆ†æ¯” (0 - 100)
+// amb   - æ—¶é—´æŒ¯å¹…ç™¾åˆ†æ¯” (0 - 100)
+// limit - æœ€å¤šåŒ…ç¼“å­˜æ•°é‡
+// mode  - 0(åå‘åŒ…ä¼šå…ˆåˆ°) 1(åå‘åŒ…å¿…ç„¶ååˆ°è¾¾)
+// åˆ°è¾¾æ—¶é—´  = å½“å‰æ—¶é—´ + rtt * 0.5 + rtt * (amb * 0.01) * random(-0.5, 0.5)
+// å…¬ç½‘æé€Ÿ  = rtt( 60), lost( 5), amb(30), limit(1000)
+// å…¬ç½‘å¿«é€Ÿ  = rtt(120), lost(10), amb(40), limit(1000)
+// å…¬ç½‘æ™®é€š  = rtt(200), lost(10), amb(50), limit(1000)
+// å…¬ç½‘æ…¢é€Ÿ  = rtt(800), lost(20), amb(60), limit(1000)
 void isim_init(iSimNet *simnet, long rtt, long lost, long amb, long limit, int mode);
 
-// É¾³ıÍøÂçÄ£ÄâÆ÷
+// åˆ é™¤ç½‘ç»œæ¨¡æ‹Ÿå™¨
 void isim_destroy(iSimNet *simnet);
 
-// ÉèÖÃÊ±¼ä
+// è®¾ç½®æ—¶é—´
 void isim_settime(iSimNet *simnet, unsigned long current);
 
 
-// ·¢ËÍÊı¾İ
+// å‘é€æ•°æ®
 long isim_send(iSimPeer *peer, const void *data, long size);
 
-// ½ÓÊÕÊı¾İ
+// æ¥æ”¶æ•°æ®
 long isim_recv(iSimPeer *peer, void *data, long maxsize);
 
-// È¡µÃ¶Ëµã£ºpeerno = 0(¶Ëµã1), 1(¶Ëµã2)
+// å–å¾—ç«¯ç‚¹ï¼špeerno = 0(ç«¯ç‚¹1), 1(ç«¯ç‚¹2)
 iSimPeer *isim_peer(iSimNet *simnet, int peerno);
 
-// ÉèÖÃËæ»úÊıÖÖ×Ó
+// è®¾ç½®éšæœºæ•°ç§å­
 void isim_seed(iSimNet *simnet, unsigned long seed1, unsigned long seed2);
 
 
