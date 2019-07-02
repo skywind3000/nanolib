@@ -2089,9 +2089,41 @@ long async_core_send_vector(CAsyncCore *core, long hid,
 	const void * const vecptr[],
 	const long veclen[], int count, int mask)
 {
+	CAsyncSock *sock = NULL;
 	long hr = -1;
 	ASYNC_CORE_CRITICAL_BEGIN(core);
-	hr = _async_core_send_vector(core, hid, vecptr, veclen, count, mask);
+	sock = async_core_node_get(core, hid);
+	if (sock) {
+		if (sock->filter == NULL) {
+			hr = _async_core_send_vector(core, hid, vecptr, 
+					veclen, count, mask);
+		}
+		else {
+			CAsyncFilter filter = ASYNC_CORE_FILTER(sock);
+			long length = 0;
+			char *ptr;
+			int valid = 1, i;
+			for (i = 0; i < count; i++) length += veclen[i];
+			if (length > core->bufsize) {
+				if (async_core_buffer_resize(core, length) != 0) {
+					valid = 0;
+					hr = -1000;
+				}
+			}
+			if (valid) {
+				for (ptr = (char*)core->data, i = 0; i < count; i++) {
+					if (vecptr[i]) {
+						memcpy(ptr, vecptr[i], veclen[i]);
+					}
+					ptr += veclen[i];
+				}
+				core->dispatch = 1;
+				hr = filter(core, sock->object, hid, 
+						ASYNC_CORE_FILTER_WRITE, core->data, length);
+				core->dispatch = 0;
+			}
+		}
+	}
 	ASYNC_CORE_CRITICAL_END(core);
 	return hr;
 }
@@ -2109,15 +2141,17 @@ long async_core_send(CAsyncCore *core, long hid, const void *ptr, long len)
 	veclen[0] = len;
 	ASYNC_CORE_CRITICAL_BEGIN(core);
 	sock = async_core_node_get(core, hid);
-	if (sock && sock->filter == NULL) {
-		hr = _async_core_send_vector(core, hid, vecptr, veclen, 1, 0);
-	}
-	else {
-		CAsyncFilter filter = ASYNC_CORE_FILTER(sock);
-		core->dispatch = 1;
-		hr = filter(core, sock->object, hid, 
-				ASYNC_CORE_FILTER_WRITE, ptr, len);
-		core->dispatch = 0;
+	if (sock) {
+		if (sock->filter == NULL) {
+			hr = _async_core_send_vector(core, hid, vecptr, veclen, 1, 0);
+		}
+		else {
+			CAsyncFilter filter = ASYNC_CORE_FILTER(sock);
+			core->dispatch = 1;
+			hr = filter(core, sock->object, hid, 
+					ASYNC_CORE_FILTER_WRITE, ptr, len);
+			core->dispatch = 0;
+		}
 	}
 	ASYNC_CORE_CRITICAL_END(core);
 	return hr;
