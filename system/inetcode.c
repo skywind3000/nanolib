@@ -1118,6 +1118,13 @@ static long async_core_node_delete(CAsyncCore *core, long hid)
 {
 	CAsyncSock *sock = async_core_node_get(core, hid);
 	if (sock == NULL) return -1;
+	if (sock->filter) {
+		CAsyncFilter filter = ASYNC_CORE_FILTER(sock);
+		filter(core, sock->object, sock->hid, 
+				ASYNC_CORE_FILTER_RELEASE, NULL, 0);
+		sock->filter = NULL;
+		sock->object = NULL;
+	}
 	if (!ilist_is_empty(&sock->node)) {
 		ilist_del(&sock->node);
 		ilist_init(&sock->node);
@@ -2101,7 +2108,6 @@ long async_core_send_vector(CAsyncCore *core, long hid,
 		else {
 			CAsyncFilter filter = ASYNC_CORE_FILTER(sock);
 			long length = 0;
-			char *ptr;
 			int valid = 1, i;
 			for (i = 0; i < count; i++) length += veclen[i];
 			if (length > core->bufsize) {
@@ -2111,6 +2117,7 @@ long async_core_send_vector(CAsyncCore *core, long hid,
 				}
 			}
 			if (valid) {
+				char *ptr;
 				for (ptr = (char*)core->data, i = 0; i < count; i++) {
 					if (vecptr[i]) {
 						memcpy(ptr, vecptr[i], veclen[i]);
@@ -2136,7 +2143,7 @@ long async_core_send(CAsyncCore *core, long hid, const void *ptr, long len)
 	CAsyncSock *sock = NULL;
 	const void *vecptr[1];
 	long veclen[1];
-	long hr;
+	long hr = -1;
 	vecptr[0] = ptr;
 	veclen[0] = len;
 	ASYNC_CORE_CRITICAL_BEGIN(core);
