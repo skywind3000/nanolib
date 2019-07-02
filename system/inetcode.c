@@ -1301,6 +1301,7 @@ static long async_core_msg_read(CAsyncCore *core, int *event, long *wparam,
 	idecode32i_lsb(head + 10, &x);
 	LPARAM = x;
 	ims_read(&core->msgs, data, length);
+	core->msgcnt--;
 	if (core->nolock == 0) {
 		IMUTEX_UNLOCK(&core->xmsg);
 	}
@@ -1840,6 +1841,7 @@ static void async_core_event_close(CAsyncCore *core,
 static void async_core_process_events(CAsyncCore *core, IUINT32 millisec)
 {
 	int fd, event, x, count, xf, code = 2010;
+	long pending = 0;
 	void *udata;
 	IUINT64 ts;
 	IUINT32 now;
@@ -1853,8 +1855,13 @@ static void async_core_process_events(CAsyncCore *core, IUINT32 millisec)
 		async_core_event_close(core, sock, sock->exitcode);
 	}
 
+	/* detect msg count */
+	if (core->nolock == 0) IMUTEX_LOCK(&core->xmsg);
+	pending = core->msgcnt;
+	if (core->nolock == 0) IMUTEX_UNLOCK(&core->xmsg);
+
 	/* waiting events */
-	count = ipoll_wait(core->pfd, millisec);
+	count = ipoll_wait(core->pfd, (pending == 0)? millisec : 0);
 
 	ts = iclock64();
 	core->current = (IUINT32)(ts & 0xfffffffful);
