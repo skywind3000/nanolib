@@ -381,7 +381,7 @@ void async_core_filter(CAsyncCore *core, long hid,
 #define ASYNC_CORE_DISPATCH_CLOSE       2
 
 /* dispatch: for filter only, don't call outside the filter */
-void async_core_dispatch(CAsyncCore *core, long hid, int cmd, 
+int async_core_dispatch(CAsyncCore *core, long hid, int cmd, 
 	const void *ptr, long size);
 
 /* set timeout */
