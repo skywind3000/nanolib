@@ -2322,6 +2322,7 @@ void async_core_filter(CAsyncCore *core, long hid,
 	CAsyncFilter filter, void *object)
 {
 	CAsyncSock *sock;
+	if (core->dispatch) return;
 	ASYNC_CORE_CRITICAL_BEGIN(core);
 	sock = async_core_node_get(core, hid);
 	if (sock) {
@@ -2334,6 +2335,13 @@ void async_core_filter(CAsyncCore *core, long hid,
 		}
 		sock->filter = ((void*)filter);
 		sock->object = object;
+		if (filter) {
+			CAsyncFilter current = ASYNC_CORE_FILTER(sock);
+			core->dispatch = 1;
+			current(core, sock->object, hid,
+				ASYNC_CORE_FILTER_INIT, NULL, 0);
+			core->dispatch = 0;
+		}
 	}	else {
 		filter(core, object, hid, ASYNC_CORE_FILTER_RELEASE, NULL, 0);
 	}
