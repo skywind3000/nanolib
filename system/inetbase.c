@@ -1717,6 +1717,9 @@ int isocket_pair(int fds[2], int mode)
 #endif
 
 
+#ifndef IPOLL_DRIVER_DEFINED
+#define IPOLL_DRIVER_DEFINED
+
 struct IPOLL_DRIVER
 {
 	int pdsize;								/* poll descriptor size */
@@ -1733,6 +1736,8 @@ struct IPOLL_DRIVER
 	int (*poll_wait)(ipolld ipd, int timeval);			
 	int (*poll_event)(ipolld ipd, int *fd, int *event, void **udata);
 };
+
+#endif
 
 /* current poll device */
 struct IPOLL_DRIVER IPOLLDRV;	
@@ -1794,6 +1799,9 @@ extern struct IPOLL_DRIVER IPOLL_WINCP;
 #ifdef IHAVE_RTSIG
 extern struct IPOLL_DRIVER IPOLL_RTSIG;
 #endif
+#ifdef IHAVE_POLLEXT
+extern struct IPOLL_DRIVER IPOLL_POLLEXT;
+#endif
 
 static struct IPOLL_DRIVER *ipoll_list[] = {
 #ifdef IHAVE_SELECT
@@ -1819,6 +1827,9 @@ static struct IPOLL_DRIVER *ipoll_list[] = {
 #endif
 #ifdef IHAVE_WINCP
 	&IPOLL_WINCP,
+#endif
+#ifdef IHAVE_POLLEXT
+	&IPOLL_POLLEXT,
 #endif
 	NULL
 };
