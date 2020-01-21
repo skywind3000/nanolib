@@ -620,7 +620,7 @@ int ikcp_input(ikcpcb *kcp, const char *data, long size)
 			ikcp_parse_ack(kcp, sn);
 			ikcp_shrink_buf(kcp);
 			if (ikcp_canlog(kcp, IKCP_LOG_IN_ACK)) {
-				ikcp_log(kcp, IKCP_LOG_IN_DATA, 
+				ikcp_log(kcp, IKCP_LOG_IN_ACK, 
 					"input ack: sn=%lu rtt=%ld rto=%ld", sn, 
 					(long)itimediff(kcp->current, ts),
 					(long)kcp->rx_rto);
