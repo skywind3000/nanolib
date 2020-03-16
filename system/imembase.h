@@ -687,6 +687,14 @@ ib_string* ib_string_rewrite_size(ib_string *str, int pos,
 
 int ib_string_compare(const struct ib_string *a, const struct ib_string *b);
 
+int ib_string_find(const ib_string *str, const char *src, int len, int start);
+int ib_string_find_c(const ib_string *str, char ch, int start);
+
+ib_array* ib_string_split(const ib_string *str, const char *sep, int len);
+ib_array* ib_string_split_c(const ib_string *str, char sep);
+
+ib_string* ib_string_strip(ib_string *str, const char *seps);
+
 
 /*--------------------------------------------------------------------*/
 /* static hash table (closed hash table with avlnode)                 */
