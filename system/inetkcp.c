@@ -863,7 +863,7 @@ void ikcp_flush(ikcpcb *kcp)
 			segment->xmit++;
 			kcp->xmit++;
 			if (kcp->nodelay == 0) {
-				segment->rto += _imax_(segment->rto, (IUINT32)kcp->rx_rto);
+				segment->rto += _imax(segment->rto, (IUINT32)kcp->rx_rto);
 			}	else {
 				IINT32 step = (kcp->nodelay < 2)? 
 					((IINT32)(segment->rto)) : kcp->rx_rto;
