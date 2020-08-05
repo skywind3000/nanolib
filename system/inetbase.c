@@ -1657,6 +1657,7 @@ failed:
 }
 
 
+/* create socket pair */
 int isocket_pair(int fds[2], int mode)
 {
 	if (isocket_pair_imp(fds, mode, -1) == 0) return 0;
@@ -1680,6 +1681,7 @@ int isocket_try_firewall(void)
 	}
 	return -1;
 }
+
 
 
 /*===================================================================*/
