@@ -276,14 +276,14 @@ static void itimer_internal_update(itimer_core *core, IUINT32 jiffies)
 //=====================================================================
 
 // initialize timer manager
-// millisec - current time stamp
 // interval - internal working interval
-void itimer_mgr_init(itimer_mgr *mgr, IUINT32 millisec, IUINT32 interval)
+void itimer_mgr_init(itimer_mgr *mgr, IUINT32 interval)
 {
-	mgr->current = millisec;
+	mgr->current = 0;
 	mgr->interval = (interval < 1)? 1 : interval;
 	mgr->jiffies = 0;
 	mgr->millisec = 0;
+	mgr->initialized = 0;
 	itimer_core_init(&mgr->core, mgr->jiffies);
 }
 
@@ -294,21 +294,27 @@ void itimer_mgr_destroy(itimer_mgr *mgr)
 }
 
 #ifndef ITIMER_MGR_LIMIT
-#define ITIMER_MGR_LIMIT	300000		// 300 seconds
+#define ITIMER_MGR_LIMIT	60000		// 60 seconds
 #endif
 
 // run timer events
 void itimer_mgr_run(itimer_mgr *mgr, IUINT32 millisec)
 {
 	IUINT32 interval = mgr->interval;
-	IINT32 limit = (IINT32)interval * 64;
-	IINT32 diff = (IINT32)(millisec - mgr->millisec);
-	if (diff > ITIMER_MGR_LIMIT + limit) {
+	IINT32 limit = ITIMER_MGR_LIMIT + (IINT32)interval * 64;
+	// first time to be called
+	if (mgr->initialized == 0) {
 		mgr->millisec = millisec;
+		mgr->initialized = 1;
 	}
-	else if (diff < -ITIMER_MGR_LIMIT - limit) {
-		mgr->millisec = millisec;
+	else {
+		IINT32 diff = (IINT32)(millisec - mgr->millisec);
+		// recover from long-time sleep
+		if (diff > limit || diff < -limit) {
+			mgr->millisec = millisec;
+		}
 	}
+	// update core timer
 	while ((IINT32)(millisec - mgr->millisec) >= 0) {
 		itimer_core_run(&mgr->core, mgr->jiffies);
 		mgr->jiffies++;
@@ -323,19 +329,30 @@ static void itimer_evt_cb(void *p)
 	itimer_evt *evt = (itimer_evt*)p;
 	itimer_mgr *mgr = evt->mgr;
 	IUINT32 current = mgr->current;
-	int count = 0;
+	int fire = 0;
 	int stop = 0;
-	while (current >= evt->slap) {
-		count++;
+
+	// time compensation, comparision takes care of uint32 overflow
+	while (((IINT32)(current - evt->slap)) >= 0) {
 		evt->slap += evt->period;
-		if (evt->repeat == 1) {
+		fire = 1;
+	}
+
+	// need invoke callback ?
+	if (fire) {
+		if (evt->repeat == 0) {
+			fire = 0;
 			stop = 1;
-			break;
-		}	
-		if (evt->repeat > 1) {
+		}
+		else if (evt->repeat > 0) {
 			evt->repeat--;
+			if (evt->repeat == 0) {
+				stop = 1;
+			}
 		}
 	}
+
+	// reschedule or stop ?
 	if (stop == 0) {
 		IUINT32 interval = mgr->interval;
 		IUINT32 expires = (evt->slap - current + interval - 1) / interval;
@@ -344,15 +361,13 @@ static void itimer_evt_cb(void *p)
 	}	else {
 		itimer_evt_stop(mgr, evt);
 	}
-	evt->running = 1;
-	for (; count > 0; count--) {
-		if (evt->callback && evt->running) {
+
+	// need invoke callback ?
+	if (fire) {
+		if (evt->callback) {
 			evt->callback(evt->data, evt->user);
-		}	else {
-			break;
 		}
 	}
-	evt->running = 0;
 }
 
 // initialize timer event
@@ -393,8 +408,8 @@ void itimer_evt_start(itimer_mgr *mgr, itimer_evt *evt,
 	if (evt->mgr) {
 		itimer_evt_stop(evt->mgr, evt);
 	}
-	evt->period = period;
-	evt->repeat = repeat;
+	evt->period = (period < 1)? 1 : period;
+	evt->repeat = (repeat <= 0)? -1 : repeat;
 	evt->slap = mgr->current + period;
 	evt->mgr = mgr;
 	expires = (evt->slap - mgr->current + interval - 1) / interval;
@@ -412,5 +427,12 @@ void itimer_evt_stop(itimer_mgr *mgr, itimer_evt *evt)
 	}
 	evt->running = 0;
 }
+
+// returns 0 for stopped and 1 for running
+int itimer_evt_status(const itimer_evt *evt)
+{
+	return (evt->mgr == NULL)? 0 : 1;
+}
+
 
 

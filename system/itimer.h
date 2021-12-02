@@ -279,6 +279,7 @@ struct itimer_mgr
 	IUINT32 current;
 	IUINT32 millisec;
 	IUINT32 jiffies;
+	int initialized;
 	itimer_core core;
 };
 
@@ -300,9 +301,8 @@ typedef struct itimer_mgr itimer_mgr;
 typedef struct itimer_evt itimer_evt;
 
 // initialize timer manager
-// millisec - current time stamp
 // interval - internal working interval
-void itimer_mgr_init(itimer_mgr *mgr, IUINT32 millisec, IUINT32 interval);
+void itimer_mgr_init(itimer_mgr *mgr, IUINT32 interval);
 
 // destroy timer manager
 void itimer_mgr_destroy(itimer_mgr *mgr);
@@ -326,6 +326,8 @@ void itimer_evt_start(itimer_mgr *mgr, itimer_evt *evt,
 // stop timer
 void itimer_evt_stop(itimer_mgr *mgr, itimer_evt *evt);
 
+// returns 0 for stopped and 1 for running
+int itimer_evt_status(const itimer_evt *evt);
 
 
 #ifdef __cplusplus
