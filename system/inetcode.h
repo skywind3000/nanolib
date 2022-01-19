@@ -53,56 +53,58 @@ int isocket_update_address(int resolvname);
 /*===================================================================*/
 struct CAsyncSock
 {
-	IUINT32 time;					/* timeout */
-	int fd;							/* socket fd */
-	int state;						/* CLOSED/CONNECTING/ESTABLISHED */
-	long hid;						/* hid */
-	long tag;						/* tag */
-	int error;						/* errno value */
-	int header;						/* header mode (0-13) */
-	int mask;						/* poll event mask */
-	int mode;						/* socket mode */
-	int ipv6;						/* 0:ipv4, 1:ipv6 */
-	int flags;						/* flag bits */
-	char *buffer;					/* internal working buffer */
-	char *external;					/* external working buffer */
-	long bufsize;					/* working buffer size */
-	long maxsize;					/* max packet size */
-	long limited;					/* buffer limited */
-	int rc4_send_x;					/* rc4 encryption variable */
-	int rc4_send_y;					/* rc4 encryption variable */
-	int rc4_recv_x;					/* rc4 encryption variable */
-	int rc4_recv_y;					/* rc4 encryption variable */
-	void *filter;					/* filter function */
-	void *object;					/* filter object */
-	int closing;					/* pending close */
-	int exitcode;					/* exit code */
-	struct ILISTHEAD node;			/* list node */
-	struct ILISTHEAD pending;		/* waiting close */
-	struct IMSTREAM linemsg;		/* line buffer */
-	struct IMSTREAM sendmsg;		/* send buffer */
-	struct IMSTREAM recvmsg;		/* recv buffer */
-	unsigned char rc4_send_box[256];	
+	IUINT32 time;                    /* timeout */
+	int fd;                          /* socket fd */
+	int state;                       /* CLOSED/CONNECTING/ESTABLISHED */
+	long hid;                        /* hid */
+	long tag;                        /* tag */
+	int error;                       /* errno value */
+	int header;                      /* header mode (0-14) */
+	int mask;                        /* poll event mask */
+	int mode;                        /* socket mode */
+	int ipv6;                        /* 0:ipv4, 1:ipv6 */
+	int flags;                       /* flag bits */
+	char *buffer;                    /* internal working buffer */
+	char *external;                  /* external working buffer */
+	long bufsize;                    /* working buffer size */
+	long maxsize;                    /* max packet size */
+	long limited;                    /* buffer limited */
+	int rc4_send_x;                  /* rc4 encryption variable */
+	int rc4_send_y;                  /* rc4 encryption variable */
+	int rc4_recv_x;                  /* rc4 encryption variable */
+	int rc4_recv_y;                  /* rc4 encryption variable */
+	void *filter;                    /* filter function */
+	void *object;                    /* filter object */
+	int protocol;                    /* filter protocol */
+	int closing;                     /* pending close */
+	int exitcode;                    /* exit code */
+	struct ILISTHEAD node;           /* list node */
+	struct ILISTHEAD pending;        /* waiting close */
+	struct IMSTREAM linemsg;         /* line buffer */
+	struct IMSTREAM sendmsg;         /* send buffer */
+	struct IMSTREAM recvmsg;         /* recv buffer */
+	unsigned char rc4_send_box[256];
 	unsigned char rc4_recv_box[256];
 };
 
 
 #ifndef ITMH_WORDLSB
-#define ITMH_WORDLSB		0		/* header: 2 bytes LSB */
-#define ITMH_WORDMSB		1		/* header: 2 bytes MSB */
-#define ITMH_DWORDLSB		2		/* header: 4 bytes LSB */
-#define ITMH_DWORDMSB		3		/* header: 4 bytes MSB */
-#define ITMH_BYTELSB		4		/* header: 1 byte LSB */
-#define ITMH_BYTEMSB		5		/* header: 1 byte MSB */
-#define ITMH_EWORDLSB		6		/* header: 2 bytes LSB (exclude self) */
-#define ITMH_EWORDMSB		7		/* header: 2 bytes MSB (exclude self) */
-#define ITMH_EDWORDLSB		8		/* header: 4 bytes LSB (exclude self) */
-#define ITMH_EDWORDMSB		9		/* header: 4 bytes MSB (exclude self) */
-#define ITMH_EBYTELSB		10		/* header: 1 byte LSB (exclude self) */
-#define ITMH_EBYTEMSB		11		/* header: 1 byte MSB (exclude self) */
-#define ITMH_DWORDMASK		12		/* header: 4 bytes LSB (self and mask) */
-#define ITMH_RAWDATA		13		/* header: raw data */
-#define ITMH_LINESPLIT		14		/* header: '\n' split */
+#define ITMH_WORDLSB        0        /* header: 2 bytes LSB */
+#define ITMH_WORDMSB        1        /* header: 2 bytes MSB */
+#define ITMH_DWORDLSB       2        /* header: 4 bytes LSB */
+#define ITMH_DWORDMSB       3        /* header: 4 bytes MSB */
+#define ITMH_BYTELSB        4        /* header: 1 byte LSB */
+#define ITMH_BYTEMSB        5        /* header: 1 byte MSB */
+#define ITMH_EWORDLSB       6        /* header: 2 bytes LSB (exclude self) */
+#define ITMH_EWORDMSB       7        /* header: 2 bytes MSB (exclude self) */
+#define ITMH_EDWORDLSB      8        /* header: 4 bytes LSB (exclude self) */
+#define ITMH_EDWORDMSB      9        /* header: 4 bytes MSB (exclude self) */
+#define ITMH_EBYTELSB      10        /* header: 1 byte LSB (exclude self) */
+#define ITMH_EBYTEMSB      11        /* header: 1 byte MSB (exclude self) */
+#define ITMH_DWORDMASK     12        /* header: 4 bytes LSB (self and mask) */
+#define ITMH_RAWDATA       13        /* header: raw data */
+#define ITMH_LINESPLIT     14        /* header: '\n' split */
+#define ITMH_COUNT         15        /* header: how many headers */
 #endif
 
 #define ASYNC_SOCK_STATE_CLOSED         0
@@ -205,7 +207,7 @@ typedef struct CAsyncCore CAsyncCore;
 #define ASYNC_CORE_EVT_DATA      3   /* data: (hid, tag)  */
 #define ASYNC_CORE_EVT_PROGRESS  4   /* output progress: (hid, tag) */
 #define ASYNC_CORE_EVT_DGRAM     5   /* raw fd event: (hid, tag) */
-#define ASYNC_CORE_EVT_PUSH      6   /* msg from async_core_post */
+#define ASYNC_CORE_EVT_POST      6   /* msg from async_core_post */
 #define ASYNC_CORE_EVT_EXTEND    7   /* user defined event */
 
 #define ASYNC_CORE_NODE_IN          1       /* accepted node */
@@ -232,6 +234,7 @@ typedef int (*CAsyncValidator)(const struct sockaddr *remote, int len,
 /* Message Filter: can be installed to connection */
 typedef int (*CAsyncFilter)(CAsyncCore *core, void *object, long hid,
 	int cmd, const void *data, long size);
+
 
 /**
  * create CAsyncCore object:
@@ -289,7 +292,7 @@ long async_core_new_dgram(CAsyncCore *core, const struct sockaddr *addr,
 	int addrlen, int mode);
 
 
-/* queue an ASYNC_CORE_EVT_PUSH event and wake async_core_wait up */
+/* queue an ASYNC_CORE_EVT_POST event and wake async_core_wait up */
 int async_core_post(CAsyncCore *core, long wparam, long lparam, 
 	const void *data, long size);
 
@@ -343,7 +346,8 @@ long async_core_node_prev(const CAsyncCore *core, long hid);
 #define ASYNC_CORE_OPTION_MASKADD       15
 #define ASYNC_CORE_OPTION_MASKDEL       16
 #define ASYNC_CORE_OPTION_SHUTDOWN      17
-#define ASYNC_CORE_OPTION_GETHEADER     18
+#define ASYNC_CORE_OPTION_GET_HEADER    18
+#define ASYNC_CORE_OPTION_GET_PROTOCOL  19
 
 /* set connection socket option */
 int async_core_option(CAsyncCore *core, long hid, int opt, long value);
@@ -372,9 +376,15 @@ void async_core_firewall(CAsyncCore *core, CAsyncValidator v, void *user);
 #define ASYNC_CORE_FILTER_WRITE         2     /* upper level data send */
 #define ASYNC_CORE_FILTER_INPUT         3     /* lower level data arrival */
 
-/* setup filter */
-void async_core_filter(CAsyncCore *core, long hid, 
-	CAsyncFilter filter, void *object);
+
+/* factory: produce CAsyncFilter and corresponding object for connections */
+/* filter object is returned in *user pointer */
+typedef CAsyncFilter (*CAsyncFactory)(void *self, int protocol, void **user);
+
+/* register filter map */
+void async_core_factory(CAsyncCore *core, int protocol, 
+	CAsyncFactory factory, void *self);
+
 
 #define ASYNC_CORE_DISPATCH_PUSH        0
 #define ASYNC_CORE_DISPATCH_SEND        1
@@ -383,6 +393,14 @@ void async_core_filter(CAsyncCore *core, long hid,
 /* dispatch: for filter only, don't call outside the filter */
 int async_core_dispatch(CAsyncCore *core, long hid, int cmd, 
 	const void *ptr, long size);
+
+
+#define ASYNC_CORE_REG_GET_PARENT	0		/* action: get parent pointer */
+#define ASYNC_CORE_REG_SET_PARENT	1		/* action: set parent pointer */
+
+/* internal config */
+void *async_core_registry(CAsyncCore *core, int action, long idx, void *ptr);
+
 
 /* set timeout */
 void async_core_timeout(CAsyncCore *core, long seconds);
