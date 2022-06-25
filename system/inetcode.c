@@ -147,9 +147,9 @@ void async_sock_init(CAsyncSock *asyncsock, struct IMEMNODE *nodes)
 	asyncsock->flags = 0;
 	asyncsock->filter = NULL;
 	asyncsock->object = NULL;
-	asyncsock->protocol = -1;
 	asyncsock->exitcode = 0;
 	asyncsock->closing = 0;
+	asyncsock->protocol = -1;
 	ilist_init(&asyncsock->node);
 	ilist_init(&asyncsock->pending);
 	ims_init(&asyncsock->linemsg, nodes, 0, 0);
@@ -302,10 +302,6 @@ int async_sock_assign(CAsyncSock *asyncsock, int sock, int header)
 
 	asyncsock->state = ASYNC_SOCK_STATE_ESTAB;
 
-	asyncsock->filter = NULL;
-	asyncsock->object = NULL;
-	asyncsock->protocol = -1;
-
 	return 0;
 }
 
@@ -443,7 +439,7 @@ int async_sock_update(CAsyncSock *asyncsock, int what)
 		hr = async_sock_try_connect(asyncsock);
 		if (hr != 0) return hr;
 	}
-	return hr;
+	return 0;
 }
 
 /* process */
@@ -489,11 +485,11 @@ long async_sock_remain(const CAsyncSock *asyncsock)
 
 
 /* header size */
-static const int async_sock_head_len[ITMH_COUNT] = 
+static const int async_sock_head_len[15] = 
 	{ 2, 2, 4, 4, 1, 1, 2, 2, 4, 4, 1, 1, 4, 0, 4 };
 
 /* header increasement */
-static const int async_sock_head_inc[ITMH_COUNT] = 
+static const int async_sock_head_inc[15] = 
 	{ 0, 0, 0, 0, 0, 0, 2, 2, 4, 4, 1, 1, 0, 0, 0 };
 
 /* peek size */
@@ -511,13 +507,8 @@ async_sock_read_size(const CAsyncSock *asyncsock)
 
 	assert(asyncsock);
 
-	if (asyncsock->header < ITMH_COUNT) {
-		hdrlen = async_sock_head_len[asyncsock->header];
-		hdrinc = async_sock_head_inc[asyncsock->header];
-	}	else {
-		hdrlen = 4;
-		hdrinc = 0;
-	}
+	hdrlen = async_sock_head_len[asyncsock->header];
+	hdrinc = async_sock_head_inc[asyncsock->header];
 
 	if (asyncsock->header == ITMH_RAWDATA) {
 		len = (unsigned long)asyncsock->recvmsg.size;
@@ -565,10 +556,6 @@ async_sock_read_size(const CAsyncSock *asyncsock)
 		len = len32 & 0xffffff;
 		break;
 	case ITMH_LINESPLIT:
-		idecode32u_lsb((char*)dsize, &len32);
-		len = len32;
-		break;
-	case ITMH_COUNT:
 		idecode32u_lsb((char*)dsize, &len32);
 		len = len32;
 		break;
@@ -690,12 +677,7 @@ long async_sock_recv_vector(CAsyncSock *asyncsock, void* const vecptr[],
 	assert(asyncsock);
 	if (asyncsock == 0) return 0;
 
-	if (asyncsock->header < ITMH_COUNT) {
-		hdrlen = async_sock_head_len[asyncsock->header];
-	}	else {
-		hdrlen = 4;
-	}
-
+	hdrlen = async_sock_head_len[asyncsock->header];
 	for (i = 0; i < count; i++) size += veclen[i];
 
 	len = async_sock_read_size(asyncsock);
@@ -826,13 +808,13 @@ struct CAsyncCore
 	int flags;
 	int dispatch;
 	void *parent;
+	CAsyncFactory factory;
 	IMUTEX_TYPE lock;
 	IMUTEX_TYPE xmtx;
 	IMUTEX_TYPE xmsg;
 	IUINT32 current;
 	IUINT32 lastsec;
 	IUINT32 timeout;
-	ib_array *factory;
 	struct ILISTHEAD pending;
 	CAsyncValidator validator;
 };
@@ -866,9 +848,6 @@ static unsigned int async_core_monitor = 0;
 static long _async_core_node_head(const CAsyncCore *core);
 static long _async_core_node_next(const CAsyncCore *core, long hid);
 static long _async_core_node_prev(const CAsyncCore *core, long hid);
-
-static void _async_core_node_filter(CAsyncCore *core, long hid, 
-	CAsyncFilter filter, void *object);
 
 
 /*-------------------------------------------------------------------*/
@@ -938,16 +917,13 @@ CAsyncCore* async_core_new(int flags)
 	core->limited = 0;
 	core->flags = 0;
 	core->dispatch = 0;
+
 	core->parent = NULL;
+	core->factory = NULL;
 
 	core->xfd[0] = -1;
 	core->xfd[1] = -1;
 	core->xfd[2] = 0;
-
-	core->factory = NULL;
-	core->factory = ib_array_new(NULL);
-
-	assert(core->factory);
 
 	IMUTEX_INIT(&core->lock);
 	IMUTEX_INIT(&core->xmtx);
@@ -1047,12 +1023,6 @@ void async_core_delete(CAsyncCore *core)
 	IMUTEX_DESTROY(&core->xmtx);
 	IMUTEX_DESTROY(&core->lock);
 	IMUTEX_DESTROY(&core->xmsg);
-
-	if (core->factory) {
-		ib_array_delete(core->factory);
-		core->factory = NULL;
-	}
-
 	memset(core, 0, sizeof(CAsyncCore));
 	ikmem_free(core);
 }
@@ -1100,14 +1070,11 @@ static long async_core_node_new(CAsyncCore *core)
 	sock->limited = core->limited;
 	sock->flags = 0;
 	sock->error = 0;
-
 	ilist_add_tail(&sock->node, &core->head);
 	ilist_init(&sock->pending);
-
 	sock->closing = 0;
 	sock->filter = NULL;
 	sock->object = NULL;
-	sock->protocol = -1;
 
 	core->count++;
 
@@ -1398,43 +1365,12 @@ static int async_core_node_mask(CAsyncCore *core, CAsyncSock *sock,
 	return ipoll_set(core->pfd, sock->fd, sock->mask);
 }
 
-
-/*-------------------------------------------------------------------*/
-/* init protocol                                                     */
-/*-------------------------------------------------------------------*/
-static int async_core_node_pinit(CAsyncCore *core, CAsyncSock *sock)
-{
-	int protocol = sock->protocol;
-	int index = protocol * 2;
-	CAsyncFilter filter = NULL;
-	CAsyncFactory factory = NULL;
-	void *self = NULL;
-	void *obj = NULL;
-
-	if (protocol < 0 || sock->header != ITMH_RAWDATA) {
-		return -1;
-	}
-
-	if (index + 1 >= (int)ib_array_size(core->factory)) {
-		return -2;
-	}
-
-	factory = (CAsyncFactory)(ib_array_ptr(core->factory)[index + 0]);
-	self = ib_array_ptr(core->factory)[index + 1];
-
-	if (factory != NULL) {
-		filter = factory(self, protocol, &obj);
-	}
-
-	_async_core_node_filter(core, sock->hid, filter, obj);
-
-	return 0;
-}
-
-
 /*-------------------------------------------------------------------*/
 /* new accept                                                        */
 /*-------------------------------------------------------------------*/
+static void _async_core_filter(CAsyncCore *core, long hid, 
+	CAsyncFilter filter, void *object);
+
 static long async_core_accept(CAsyncCore *core, long listen_hid)
 {
 	CAsyncSock *sock = async_core_node_get(core, listen_hid);
@@ -1447,7 +1383,7 @@ static long async_core_accept(CAsyncCore *core, long listen_hid)
 	int fd = -1;
 	int addrlen = 0;
 	int head = 0;
-	int protocol = -1;
+	int protocol;
 	int hr;
 
 	if (sock == NULL) return -1;
@@ -1485,6 +1421,8 @@ static long async_core_accept(CAsyncCore *core, long listen_hid)
 		}
 	}
 
+	protocol = sock->protocol;
+
 	hid = async_core_node_new(core);
 
 	if (hid < 0) {
@@ -1495,7 +1433,6 @@ static long async_core_accept(CAsyncCore *core, long listen_hid)
 	head = sock->header;
 	limited = sock->limited;
 	maxsize = sock->maxsize;
-	protocol = sock->protocol;
 
 	sock = async_core_node_get(core, hid);
 
@@ -1509,16 +1446,11 @@ static long async_core_accept(CAsyncCore *core, long listen_hid)
 
 	async_sock_assign(sock, fd, head);
 
-	if (protocol >= 0) {
-		sock->header = ITMH_RAWDATA;
-		sock->protocol = protocol;
-	}
-
 	isocket_enable(fd, ISOCK_CLOEXEC);
 
 	sock->limited = limited;
 	sock->maxsize = maxsize;
-	
+
 	hr = ipoll_add(core->pfd, fd, IPOLL_IN | IPOLL_ERR, sock);
 	if (hr != 0) {
 		async_core_node_delete(core, hid);
@@ -1527,12 +1459,18 @@ static long async_core_accept(CAsyncCore *core, long listen_hid)
 
 	async_core_node_mask(core, sock, IPOLL_IN | IPOLL_ERR, 0);
 
+	if (protocol >= 0) {
+		sock->protocol = protocol;
+		if (core->factory != NULL) {
+			CAsyncFilter filter;
+			void *object;
+			filter = core->factory(core, hid, protocol, &object);
+			_async_core_filter(core, hid, filter, object);
+		}
+	}
+
 	async_core_msg_push(core, ASYNC_CORE_EVT_NEW, hid, 
 		listen_hid, remote, addrlen);
-
-	if (protocol >= 0) {
-		async_core_node_pinit(core, sock);
-	}
 
 	return hid;
 }
@@ -1546,7 +1484,6 @@ static long _async_core_new_connect(CAsyncCore *core,
 {
 	CAsyncSock *sock;
 	long hid;
-	int protocol = -1;
 	int hr;
 
 	hid = async_core_node_new(core);
@@ -1559,18 +1496,11 @@ static long _async_core_new_connect(CAsyncCore *core,
 		abort();
 	}
 
-	if (header >= ITMH_COUNT) {
-		protocol = header;
-		header = ITMH_RAWDATA;
-	}
-
 	if (async_sock_connect(sock, addr, addrlen, header) != 0) {
 		async_sock_close(sock);
 		async_core_node_delete(core, hid);
 		return -2;
 	}
-
-	sock->protocol = protocol;
 
 	hr = ipoll_add(core->pfd, sock->fd, IPOLL_OUT | IPOLL_ERR, sock);
 	if (hr != 0) {
@@ -1584,8 +1514,6 @@ static long _async_core_new_connect(CAsyncCore *core,
 
 	async_core_msg_push(core, ASYNC_CORE_EVT_NEW, hid, 
 		0, addr, addrlen);
-
-	async_core_node_pinit(core, sock);
 
 	return hid;
 }
@@ -1645,12 +1573,6 @@ static long _async_core_new_assign(CAsyncCore *core, int fd,
 	}
 
 	async_sock_assign(sock, fd, header);
-	
-	if (header >= ITMH_COUNT) {
-		sock->header = ITMH_RAWDATA;
-		sock->protocol = header;
-	}
-
 	sock->ipv6 = ipv6;
 
 	hr = ipoll_add(core->pfd, sock->fd, IPOLL_OUT | IPOLL_ERR, sock);
@@ -1668,8 +1590,6 @@ static long _async_core_new_assign(CAsyncCore *core, int fd,
 
 	async_core_msg_push(core, ASYNC_CORE_EVT_NEW, hid, 
 		0, name, size);
-
-	async_core_node_pinit(core, sock);
 
 	return hid;
 }
@@ -1773,15 +1693,7 @@ static long _async_core_new_listen(CAsyncCore *core,
 		ilist_init(&sock->node);
 	}
 
-	header &= 0xff;
-
-	if (header < ITMH_COUNT) {
-		sock->header = header;
-		sock->protocol = -1;
-	}	else {
-		sock->header = ITMH_RAWDATA;
-		sock->protocol = header;
-	}
+	sock->header = header & 0xff;
 
 	async_core_msg_push(core, ASYNC_CORE_EVT_NEW, hid, 
 		-1, addr, addrlen);
@@ -1938,7 +1850,7 @@ static void async_core_event_close(CAsyncCore *core,
 		ipoll_del(core->pfd, sock->fd);
 	}
 	async_sock_close(sock);
-	async_core_msg_push(core, ASYNC_CORE_EVT_LEAVE, sock->hid,
+	async_core_msg_push(core, ASYNC_CORE_EVT_CLOSE, sock->hid,
 		sock->tag, data, sizeof(IUINT32) * 2);
 	async_core_node_delete(core, sock->hid);
 }
@@ -2428,7 +2340,7 @@ long async_core_remain(const CAsyncCore *core, long hid)
 }
 
 /* setup filter */
-static void _async_core_node_filter(CAsyncCore *core, long hid, 
+static void _async_core_filter(CAsyncCore *core, long hid, 
 	CAsyncFilter filter, void *object)
 {
 	CAsyncSock *sock;
@@ -2461,23 +2373,7 @@ void async_core_filter(CAsyncCore *core, long hid,
 	CAsyncFilter filter, void *object)
 {
 	ASYNC_CORE_CRITICAL_BEGIN(core);
-	_async_core_node_filter(core, hid, filter, object);
-	ASYNC_CORE_CRITICAL_END(core);
-}
-
-/* register filter map */
-void async_core_factory(CAsyncCore *core, int protocol, 
-	CAsyncFactory factory, void *self)
-{
-	int index = protocol * 2;
-	ASYNC_CORE_CRITICAL_BEGIN(core);
-	if (protocol >= 0) {
-		while (index + 1 >= (int)ib_array_size(core->factory)) {
-			ib_array_push(core->factory, NULL);
-		}
-		ib_array_ptr(core->factory)[index + 0] = (void*)factory;
-		ib_array_ptr(core->factory)[index + 1] = self;
-	}
+	_async_core_filter(core, hid, filter, object);
 	ASYNC_CORE_CRITICAL_END(core);
 }
 
@@ -2509,6 +2405,58 @@ int async_core_dispatch(CAsyncCore *core, long hid, int cmd,
 		break;
 	}
 	return 0;
+}
+
+/* read/write registry */
+void* async_core_registry(CAsyncCore *core, int op, int value, void *ptr)
+{
+	void *hr = NULL;
+	ASYNC_CORE_CRITICAL_BEGIN(core);
+	switch (op) {
+	case ASYNC_CORE_REG_GET_PARENT:
+		hr = core->parent;
+		break;
+	case ASYNC_CORE_REG_SET_PARENT:
+		core->parent = ptr;
+		break;
+	case ASYNC_CORE_REG_GET_FACTORY:
+		hr = core->factory;
+		break;
+	case ASYNC_CORE_REG_SET_FACTORY:
+		core->factory = (CAsyncFactory)ptr;
+		break;
+	}
+	ASYNC_CORE_CRITICAL_END(core);
+	return hr;
+}
+
+/* setup protocol */
+static int _async_core_protocol(CAsyncCore *core, long hid, int protocol)
+{
+	CAsyncSock *sock;
+	if (core == NULL) return -1;
+	if (core->factory == NULL) return -2;
+	sock = async_core_node_get(core, hid);
+	if (sock == NULL) return -3;
+	sock->protocol = protocol;
+	if (sock->mode == ASYNC_CORE_NODE_IN ||
+		sock->mode == ASYNC_CORE_NODE_OUT ||
+		sock->mode == ASYNC_CORE_NODE_ASSIGN) {
+		void *object = NULL;
+		CAsyncFilter filter = core->factory(core, hid, protocol, &object);
+		_async_core_filter(core, hid, filter, object);
+	}
+	return 0;
+}
+
+/* setup protocol */
+int async_core_protocol(CAsyncCore *core, long hid, int protocol)
+{
+	int hr = -1;
+	ASYNC_CORE_CRITICAL_BEGIN(core);
+	hr = _async_core_protocol(core, hid, protocol);
+	ASYNC_CORE_CRITICAL_END(core);
+	return hr;
 }
 
 /* set connection socket option */
@@ -2643,22 +2591,6 @@ static int _async_core_option(CAsyncCore *core, long hid,
 		break;
 	}
 	return hr;
-}
-
-
-/* internal config */
-void *async_core_registry(CAsyncCore *core, int action, long idx, void *ptr)
-{
-	void *retval = NULL;
-	switch (action) {
-	case ASYNC_CORE_REG_GET_PARENT:
-		retval = core->parent;
-		break;
-	case ASYNC_CORE_REG_SET_PARENT:
-		core->parent = retval;
-		break;
-	}
-	return retval;
 }
 
 
